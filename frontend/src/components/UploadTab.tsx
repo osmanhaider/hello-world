@@ -66,7 +66,7 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
     <div style={{ maxWidth: 640, margin: "0 auto" }}>
       <h2 style={{ color: "white", marginBottom: 8, fontSize: 22 }}>Upload Utility Bill</h2>
       <p style={{ color: "#9ca3af", marginBottom: 24, fontSize: 14 }}>
-        Upload a photo or PDF of your Estonian utility bill. Claude AI will extract all details automatically.
+        Upload a photo or PDF of your Estonian utility bill — Tesseract OCR + pdfplumber extract every line item locally, no API key needed.
       </p>
 
       <div
@@ -94,7 +94,7 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
         {status === "uploading" ? (
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
             <Loader2 size={40} color="#2563eb" style={{ animation: "spin 1s linear infinite" }} />
-            <p style={{ color: "#9ca3af", margin: 0 }}>Analyzing receipt with Claude AI…</p>
+            <p style={{ color: "#9ca3af", margin: 0 }}>Running OCR &amp; extracting line items…</p>
           </div>
         ) : status === "success" ? (
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
@@ -209,13 +209,67 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
       )}
 
       <div style={{ ...cardStyle, marginTop: 24 }}>
-        <h3 style={{ color: "white", margin: "0 0 12px", fontSize: 14 }}>Supported Estonian Providers</h3>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-          {["Eesti Energia", "Elering", "Tallinna Vesi", "Gasum", "Telia", "Elisa", "Tele2", "Adven", "Fortum", "Utilitas"].map(p => (
-            <span key={p} style={{ background: "#252838", border: "1px solid #374151", borderRadius: 6, padding: "4px 10px", fontSize: 12, color: "#d1d5db" }}>
-              {p}
+        <h3 style={{ color: "white", margin: "0 0 6px", fontSize: 14 }}>What this app supports</h3>
+        <p style={{ color: "#9ca3af", margin: "0 0 14px", fontSize: 13, lineHeight: 1.5 }}>
+          Designed around the Tallinn housing-association (korteriühistu) invoice format, but the parser
+          and Estonian→English translation dictionary also recognise bills from the major Estonian
+          utility suppliers below. Any bill with a <em>Kirjeldus / Ühik / Kogus / Hind / Summa</em>
+          style line-items table should parse cleanly.
+        </p>
+
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ fontSize: 11, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6, fontWeight: 600 }}>
+            🏢 Housing associations
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            <span style={{ background: "#1e2640", border: "1px solid #2563eb", borderRadius: 6, padding: "4px 10px", fontSize: 12, color: "#e5e7eb" }}>
+              Korteriühistu (any)
             </span>
-          ))}
+          </div>
+        </div>
+
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ fontSize: 11, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6, fontWeight: 600 }}>
+            ⚡ Electricity / gas
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {["Eesti Energia", "Elektrilevi", "Elering", "Eesti Gaas", "Gasum"].map(p => (
+              <span key={p} style={{ background: "#252838", border: "1px solid #374151", borderRadius: 6, padding: "4px 10px", fontSize: 12, color: "#d1d5db" }}>{p}</span>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ fontSize: 11, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6, fontWeight: 600 }}>
+            💧 Water / ♨️ heating
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {["Tallinna Vesi", "Tartu Veevärk", "Adven", "Utilitas", "Gren"].map(p => (
+              <span key={p} style={{ background: "#252838", border: "1px solid #374151", borderRadius: 6, padding: "4px 10px", fontSize: 12, color: "#d1d5db" }}>{p}</span>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ fontSize: 11, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6, fontWeight: 600 }}>
+            🌐 Telecom
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {["Telia", "Elisa", "Tele2", "Starman"].map(p => (
+              <span key={p} style={{ background: "#252838", border: "1px solid #374151", borderRadius: 6, padding: "4px 10px", fontSize: 12, color: "#d1d5db" }}>{p}</span>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <div style={{ fontSize: 11, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6, fontWeight: 600 }}>
+            🗑️ Waste
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {["Ragn-Sells", "STS", "Eesti Keskkonnateenused"].map(p => (
+              <span key={p} style={{ background: "#252838", border: "1px solid #374151", borderRadius: 6, padding: "4px 10px", fontSize: 12, color: "#d1d5db" }}>{p}</span>
+            ))}
+          </div>
         </div>
       </div>
 
