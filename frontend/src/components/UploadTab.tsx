@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import { api } from "../api";
-import { Upload, CheckCircle, AlertCircle, Loader2 } from "lucide-react";
+import { Upload, CheckCircle, AlertCircle, Loader2, RefreshCw } from "lucide-react";
 
 const UTILITY_ICONS: Record<string, string> = {
   electricity: "⚡",
@@ -16,7 +16,7 @@ interface UploadTabProps {
   onSuccess: () => void;
 }
 
-type Status = "idle" | "uploading" | "success" | "error";
+type Status = "idle" | "uploading" | "success" | "replaced" | "error";
 
 export default function UploadTab({ onSuccess }: UploadTabProps) {
   const [dragging, setDragging] = useState(false);
@@ -31,7 +31,7 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
     try {
       const res = await api.uploadBill(file);
       setParsed(res.data.parsed);
-      setStatus("success");
+      setStatus(res.data.replaced ? "replaced" : "success");
       setTimeout(onSuccess, 2000);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Upload failed";
@@ -59,11 +59,14 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
     padding: 24,
   };
 
+  const isSuccess = status === "success" || status === "replaced";
+
   return (
     <div style={{ maxWidth: 640, margin: "0 auto" }}>
       <h2 style={{ color: "white", marginBottom: 8, fontSize: 22 }}>Upload Utility Bill</h2>
       <p style={{ color: "#9ca3af", marginBottom: 24, fontSize: 14 }}>
-        Upload a photo or PDF of your Estonian utility bill. Claude AI will extract all details automatically.
+        Tesseract OCR + pdfplumber extract every line item locally — no API key needed.
+        Supports korteriühistu invoices and individual utility bills.
       </p>
 
       <div
@@ -91,7 +94,13 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
         {status === "uploading" ? (
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
             <Loader2 size={40} color="#2563eb" style={{ animation: "spin 1s linear infinite" }} />
-            <p style={{ color: "#9ca3af", margin: 0 }}>Analyzing receipt with Claude AI…</p>
+            <p style={{ color: "#9ca3af", margin: 0 }}>Running OCR &amp; extracting line items…</p>
+          </div>
+        ) : status === "replaced" ? (
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
+            <RefreshCw size={40} color="#f59e0b" />
+            <p style={{ color: "#f59e0b", margin: 0, fontWeight: 600 }}>Existing bill replaced</p>
+            <p style={{ color: "#9ca3af", margin: 0, fontSize: 13 }}>Duplicate detected — previous entry updated</p>
           </div>
         ) : status === "success" ? (
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
@@ -118,7 +127,7 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
         )}
       </div>
 
-      {status === "success" && parsed && (
+      {isSuccess && parsed && (
         <>
           <div style={{ ...cardStyle, marginTop: 24 }}>
             <h3 style={{ color: "white", margin: "0 0 16px", fontSize: 16 }}>
@@ -200,13 +209,59 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
       )}
 
       <div style={{ ...cardStyle, marginTop: 24 }}>
-        <h3 style={{ color: "white", margin: "0 0 12px", fontSize: 14 }}>Supported Estonian Providers</h3>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-          {["Eesti Energia", "Elering", "Tallinna Vesi", "Gasum", "Telia", "Elisa", "Tele2", "Adven", "Fortum", "Utilitas"].map(p => (
-            <span key={p} style={{ background: "#252838", border: "1px solid #374151", borderRadius: 6, padding: "4px 10px", fontSize: 12, color: "#d1d5db" }}>
-              {p}
-            </span>
-          ))}
+        <h3 style={{ color: "white", margin: "0 0 4px", fontSize: 14 }}>Supported Estonian Providers</h3>
+        <p style={{ color: "#6b7280", fontSize: 12, margin: "0 0 12px" }}>Works with any Estonian utility bill. Best accuracy with PDF invoices.</p>
+
+        <div style={{ marginBottom: 10 }}>
+          <div style={{ fontSize: 11, color: "#2563eb", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6, fontWeight: 600 }}>
+            Housing Associations
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {["Korteriühistu (any)", "Building Management"].map(p => (
+              <span key={p} style={{ background: "#1e2640", border: "1px solid #2563eb", borderRadius: 6, padding: "4px 10px", fontSize: 12, color: "#93c5fd" }}>
+                {p}
+              </span>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ marginBottom: 10 }}>
+          <div style={{ fontSize: 11, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>
+            Electricity &amp; Gas
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {["Eesti Energia", "Elektrilevi", "Elering", "Eesti Gaas", "Gasum"].map(p => (
+              <span key={p} style={{ background: "#252838", border: "1px solid #374151", borderRadius: 6, padding: "4px 10px", fontSize: 12, color: "#d1d5db" }}>
+                {p}
+              </span>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ marginBottom: 10 }}>
+          <div style={{ fontSize: 11, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>
+            Water, Heating &amp; Telecom
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {["Tallinna Vesi", "Adven", "Utilitas", "Gren", "Telia", "Elisa", "Tele2"].map(p => (
+              <span key={p} style={{ background: "#252838", border: "1px solid #374151", borderRadius: 6, padding: "4px 10px", fontSize: 12, color: "#d1d5db" }}>
+                {p}
+              </span>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <div style={{ fontSize: 11, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>
+            Waste Collection
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {["Ragn-Sells", "STS", "Eesti Keskkonnateenused"].map(p => (
+              <span key={p} style={{ background: "#252838", border: "1px solid #374151", borderRadius: 6, padding: "4px 10px", fontSize: 12, color: "#d1d5db" }}>
+                {p}
+              </span>
+            ))}
+          </div>
         </div>
       </div>
 
