@@ -120,9 +120,29 @@ def parse_bill_with_openrouter(
                 pass
 
     text = (response.choices[0].message.content or "").strip()
+    if not text:
+        raise RuntimeError(
+            f"Model {chosen_model} returned an empty response. "
+            "Try a different model from the dropdown."
+        )
+
+    # Strip markdown fences if the model wrapped the JSON in ```…```
     if text.startswith("```"):
         text = text.split("```")[1]
         if text.startswith("json"):
             text = text[4:]
         text = text.strip()
-    return json.loads(text)
+
+    # Some vision models emit prose around the JSON. Slice to the first
+    # '{' … matching '}' so we can still parse those responses.
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        start = text.find("{")
+        end = text.rfind("}")
+        if start == -1 or end == -1 or end <= start:
+            raise RuntimeError(
+                f"Model {chosen_model} returned non-JSON output. "
+                f"First 200 chars: {text[:200]!r}"
+            ) from None
+        return json.loads(text[start : end + 1])
