@@ -11,10 +11,22 @@ from typing import Optional
 # Keys are lowercase for case-insensitive matching.
 # ---------------------------------------------------------------------------
 GLOSSARY: dict[str, str] = {
-    # Energy / electricity
+    # -----------------------------------------------------------------------
+    # Electricity
+    # -----------------------------------------------------------------------
     "elektrienergia": "Electricity",
     "elekter": "Electricity",
-    "elektrieneregia": "Electricity",
+    "elektrieneregia": "Electricity",          # common OCR/typo variant
+    "elekter päevane": "Electricity (daytime)",
+    "elekter öine": "Electricity (night-time)",
+    "elekter öö": "Electricity (night-time)",
+    "päevane elekter": "Electricity (daytime)",
+    "öine elekter": "Electricity (night-time)",
+    "päevane": "Daytime",
+    "öine": "Night-time",
+    "üldelekter": "Common area electricity",    # korteriühistu billing
+    "üldelecter": "Common area electricity",    # common OCR/typo variant
+    "üldenergia": "Common area energy",
     "võrguteenus": "Grid service",
     "võrgutasu": "Grid fee",
     "jaotusvõrguteenus": "Distribution network service",
@@ -35,15 +47,17 @@ GLOSSARY: dict[str, str] = {
     "põhitariif": "Base tariff",
     "ületarbimistasu": "Excess consumption fee",
     "öötariif": "Night tariff",
-    "päevane tariff": "Day tariff",
-    "öine tariff": "Night tariff",
+    "päevane tariif": "Day tariff",
+    "öine tariif": "Night tariff",
     "tippkoormus": "Peak load",
     "madalkoormus": "Off-peak load",
     "koormusjuhtimine": "Load management",
     "bilansienergia": "Balancing energy",
     "reaktiivenergia": "Reactive energy",
 
+    # -----------------------------------------------------------------------
     # Gas
+    # -----------------------------------------------------------------------
     "maagaas": "Natural gas",
     "gaas": "Gas",
     "gaasivõrguteenus": "Gas network service",
@@ -51,25 +65,34 @@ GLOSSARY: dict[str, str] = {
     "gaasienergia": "Gas energy",
     "gaasi transport": "Gas transport",
 
+    # -----------------------------------------------------------------------
     # Water
+    # -----------------------------------------------------------------------
     "külm vesi": "Cold water",
     "soe vesi": "Hot water",
+    "üldvesi": "Common area water",            # korteriühistu billing
     "vesi": "Water",
+    "vee soojendamine": "Water heating",
+    "soojavesi": "Hot water",
     "kanalisatsioon": "Sewerage / Wastewater",
     "ühisveevärk": "Public water supply",
     "äravool": "Drainage",
     "reovesi": "Wastewater",
     "sademevesi": "Stormwater",
 
+    # -----------------------------------------------------------------------
     # Heating / district heating
+    # -----------------------------------------------------------------------
+    "küte": "Heating",
     "kaugküte": "District heating",
     "soojusenergia": "Thermal energy",
     "soojus": "Heat",
     "soojusvõrk": "Heat network",
     "küttesüsteem": "Heating system",
-    "soojavesi": "Hot water",
 
+    # -----------------------------------------------------------------------
     # Internet / telecom
+    # -----------------------------------------------------------------------
     "internetiteenus": "Internet service",
     "lairiba": "Broadband",
     "televisioon": "Television",
@@ -78,7 +101,10 @@ GLOSSARY: dict[str, str] = {
     "mobiilside": "Mobile service",
     "datapakett": "Data package",
 
+    # -----------------------------------------------------------------------
     # Waste
+    # -----------------------------------------------------------------------
+    "prügivedu": "Waste collection",
     "jäätmevedu": "Waste collection",
     "jäätmekäitlus": "Waste management",
     "olmejäätmed": "Household waste",
@@ -87,15 +113,65 @@ GLOSSARY: dict[str, str] = {
     "biojäätmed": "Bio waste",
     "pakend": "Packaging waste",
 
-    # Bill / invoice structure
+    # -----------------------------------------------------------------------
+    # Housing association (korteriühistu) services
+    # These appear on building management bills, not utility company bills.
+    # -----------------------------------------------------------------------
+    "korteriühistu": "Housing association (apartment co-op)",
+    "haldusteenus": "Building management service",
+    "haldus": "Management",
+    "raamatupidamisteenus": "Accounting service",
+    "raamatupidamine": "Accounting",
+    "tehnosüsteemide hooldusteenus": "Technical systems maintenance",
+    "tehnosüsteemide hooldus": "Technical systems maintenance",
+    "tehnosüsteemid": "Technical systems",
+    "hooldus": "Maintenance",
+    "sise- ja väliskoristus": "Interior & exterior cleaning",
+    "sise-ja väliskoristus": "Interior & exterior cleaning",
+    "koristus": "Cleaning",
+    "porivaiba renditeenus": "Doormat rental service",
+    "porivaip": "Doormat",
+    "renditeenus": "Rental service",
+    "rent": "Rental",
+    "remondifond": "Repair/Renovation fund",
+    "remont": "Repair / Renovation",
+    "fond": "Fund",
+    "üldkulud": "Common area costs",
+    "majanduskulud": "Operating costs",
+    "halduskulud": "Administration costs",
+    "koristusteenus": "Cleaning service",
+    "valve": "Security / Guard service",
+    "trepikoda": "Staircase",
+    "koridor": "Corridor",
+    "lift": "Elevator",
+    "liftiteenus": "Elevator service",
+    "parkla": "Parking",
+    "garaaž": "Garage",
+    "kelder": "Basement / Cellar",
+    "pöönin": "Attic",
+    "neto pind": "Net floor area",
+    "pind": "Floor area",
+    "eluruumid": "Living space",
+    "äriruumid": "Commercial space",
+
+    # -----------------------------------------------------------------------
+    # Bill / invoice structure & field labels
+    # -----------------------------------------------------------------------
     "arve": "Invoice",
+    "arve nr": "Invoice no.",
+    "arve nr.": "Invoice no.",
     "arve number": "Invoice number",
     "arve kuupäev": "Invoice date",
+    "kuupäev": "Date",
+    "tähtaeg": "Due date",
     "tasumise tähtaeg": "Payment due date",
     "maksetähtaeg": "Payment due date",
+    "viitenumber": "Reference number",
+    "viitenr": "Reference no.",
     "periood": "Period",
     "arvestusperiood": "Billing period",
     "arveldusperiood": "Billing period",
+    "kirjeldus": "Description",
     "kogus": "Quantity",
     "ühik": "Unit",
     "ühikuhind": "Unit price",
@@ -108,6 +184,8 @@ GLOSSARY: dict[str, str] = {
     "käibemaksusumma": "VAT amount",
     "summa ilma käibemaksuta": "Amount excl. VAT",
     "summa käibemaksuga": "Amount incl. VAT",
+    "tasumisele kuulub": "Amount due",
+    "tasumisele kuulub eur": "Amount due (EUR)",
     "soodustus": "Discount",
     "allahindlus": "Discount",
     "viivis": "Late payment interest",
@@ -123,20 +201,29 @@ GLOSSARY: dict[str, str] = {
     "laekumata arved": "Outstanding invoices",
     "krediit": "Credit",
     "intress": "Interest",
+    "viimase laekumise kuupäev": "Last payment date",
+    "viimased teatatud näidud": "Last reported meter readings",
 
-    # Meter / readings
+    # -----------------------------------------------------------------------
+    # Meter readings  (incl. korteriühistu inline format "Alg: X Löpp: Y")
+    # -----------------------------------------------------------------------
     "mõõdik": "Meter",
     "mõõturi näit": "Meter reading",
     "näit": "Reading",
     "algnäit": "Opening reading",
     "lõppnäit": "Closing reading",
+    "alg": "Start (opening reading)",
+    "lõpp": "End (closing reading)",
+    "löpp": "End (closing reading)",          # variant spelling seen in bills
     "tarbimine": "Consumption",
     "mõõtmine": "Measurement",
     "mõõtepunkt": "Metering point",
     "eic kood": "EIC code (meter ID)",
 
+    # -----------------------------------------------------------------------
     # Customer / contract
-    "klient": "Customer",
+    # -----------------------------------------------------------------------
+    "klient": "Client / Customer",
     "kliendi number": "Customer number",
     "konto number": "Account number",
     "lepingu number": "Contract number",
@@ -150,15 +237,22 @@ GLOSSARY: dict[str, str] = {
     "käibemaksukohustuslase number": "VAT registration number",
     "registreerimisnumber": "Registration number",
     "reg nr": "Reg. no.",
+    "reg. nr": "Reg. no.",
+    "iban": "IBAN (bank account)",
 
-    # Common units
+    # -----------------------------------------------------------------------
+    # Units
+    # -----------------------------------------------------------------------
     "kwh": "kWh",
     "mwh": "MWh",
-    "m³": "m³",
-    "m3": "m³",
+    "m²": "m² (square metres)",
+    "m2": "m² (square metres)",
+    "m³": "m³ (cubic metres)",
+    "m3": "m³ (cubic metres)",
     "gj": "GJ",
     "mj": "MJ",
     "tk": "pcs",
+    "krt": "occurrence / time",              # korteriühistu: per-unit charge
     "kuud": "months",
     "päevad": "days",
     "tund": "hour",
@@ -168,23 +262,30 @@ GLOSSARY: dict[str, str] = {
 
 # Common Estonian providers with a short English description
 PROVIDERS: dict[str, str] = {
+    # Electricity / gas
     "eesti energia": "Eesti Energia (Estonian electricity & gas supplier)",
     "elektrilevi": "Elektrilevi (Estonian distribution network operator)",
     "elering": "Elering (Estonian transmission system operator)",
     "eesti gaas": "Eesti Gaas (Estonian gas supplier)",
     "gasum": "Gasum (gas supplier)",
+    # Water
     "tallinna vesi": "Tallinna Vesi (Tallinn water utility)",
     "tartu veevärk": "Tartu Veevärk (Tartu water utility)",
+    # Heating
     "adven": "Adven (district heating)",
     "utilitas": "Utilitas (district heating)",
     "gren": "Gren (district heating)",
+    # Telecom
     "telia": "Telia (telecom: internet, TV, phone)",
     "elisa": "Elisa (telecom: internet, TV, phone)",
     "tele2": "Tele2 (mobile & internet)",
     "starman": "Starman (cable TV & internet)",
+    # Waste
     "sts": "STS (waste management)",
     "ragn-sells": "Ragn-Sells (waste collection & recycling)",
     "eesti keskkonnateenused": "Estonian Environmental Services (waste)",
+    # Housing associations — matched by suffix "korteriühistu"
+    "korteriühistu": "Housing association (apartment building co-op)",
 }
 
 # Utility type labels
@@ -195,23 +296,48 @@ UTILITY_LABELS: dict[str, str] = {
     "heating": "district heating",
     "internet": "internet / telecom",
     "waste": "waste collection",
-    "other": "utility",
+    "other": "building services",
 }
+
+
+import re as _re
+
+# Matches meter reading suffix embedded in line descriptions:
+# e.g. "Elekter päevane Alg: 9644 Löpp: 9726" or "Külm vesi Alg: 443,500 Löpp: 446,200"
+_METER_SUFFIX = _re.compile(
+    r"\s+[Aa]lg[:\s]+[\d,\.]+\s+[LlÖö][öo]pp[:\s]+[\d,\.]+",
+    _re.IGNORECASE,
+)
 
 
 def translate_term(term: str) -> str:
     """Look up an Estonian term and return its English translation.
-    Falls back to title-casing the original if not found."""
-    key = term.strip().lower()
+    Strips embedded meter-reading suffixes before lookup so that
+    'Elekter päevane Alg: 9644 Löpp: 9726' → 'Electricity (daytime) [Start: 9644, End: 9726]'.
+    """
+    raw = term.strip()
+    meter_note = ""
+    m = _METER_SUFFIX.search(raw)
+    if m:
+        # Extract the numbers to append in English
+        nums = _re.findall(r"[\d,\.]+", m.group())
+        if len(nums) >= 2:
+            meter_note = f" [Start: {nums[0]}, End: {nums[1]}]"
+        raw = raw[: m.start()].strip()
+
+    key = raw.lower()
     if key in GLOSSARY:
-        return GLOSSARY[key]
+        return GLOSSARY[key] + meter_note
+
     # Try partial match: find longest matching key that is a substring
     best = ""
     best_val = ""
     for k, v in GLOSSARY.items():
         if k in key and len(k) > len(best):
             best, best_val = k, v
-    return best_val if best_val else term.strip().title()
+
+    base = best_val if best_val else raw.title()
+    return base + meter_note
 
 
 def translate_line_items(raw_items: list[dict]) -> list[dict]:
@@ -251,11 +377,12 @@ def build_glossary(line_items: list[dict], extra_terms: list[str] | None = None)
 
 def generate_summary(parsed: dict) -> str:
     """
-    Build a plain-English summary sentence from structured bill fields.
-    No AI needed — purely template-based.
+    Build a plain-English summary from structured bill fields.
+    Handles both single-utility bills (Eesti Energia) and multi-service
+    housing association (korteriühistu) bills.
     """
     provider = parsed.get("provider") or "Unknown provider"
-    utype = UTILITY_LABELS.get(parsed.get("utility_type") or "", "utility")
+    utype = UTILITY_LABELS.get(parsed.get("utility_type") or "", "building services")
     amount = parsed.get("amount_eur")
     period_start = parsed.get("period_start")
     period_end = parsed.get("period_end")
@@ -263,12 +390,20 @@ def generate_summary(parsed: dict) -> str:
     consumption_kwh = parsed.get("consumption_kwh")
     consumption_m3 = parsed.get("consumption_m3")
     due_date = parsed.get("due_date")
+    line_items: list[dict] = parsed.get("line_items") or []
 
     parts: list[str] = []
+    amount_str = f"€{amount:.2f}" if amount is not None else "an unknown amount"
+    is_housing = "korteriühistu" in provider.lower()
 
     # Core sentence
-    amount_str = f"€{amount:.2f}" if amount is not None else "an unknown amount"
-    if period_start and period_end:
+    if is_housing:
+        period = f" for {period_start} to {period_end}" if period_start and period_end else ""
+        parts.append(
+            f"Housing association invoice{period} totalling {amount_str}. "
+            f"Covers building management, maintenance, cleaning, utilities, and renovation fund."
+        )
+    elif period_start and period_end:
         parts.append(f"{provider} charged {amount_str} for {utype} covering {period_start} to {period_end}.")
     elif bill_date:
         parts.append(f"{provider} issued a {utype} bill for {amount_str} on {bill_date}.")
@@ -277,9 +412,16 @@ def generate_summary(parsed: dict) -> str:
 
     # Consumption detail
     if consumption_kwh is not None:
-        parts.append(f"Total consumption was {consumption_kwh:g} kWh.")
+        parts.append(f"Total electricity consumption: {consumption_kwh:g} kWh.")
     elif consumption_m3 is not None:
-        parts.append(f"Total consumption was {consumption_m3:g} m³.")
+        parts.append(f"Total consumption: {consumption_m3:g} m³.")
+
+    # For housing bills, summarise service categories found in line items
+    if is_housing and line_items:
+        categories = {li.get("description_en", "") for li in line_items if li.get("description_en")}
+        if categories:
+            cat_list = ", ".join(sorted(categories)[:6])
+            parts.append(f"Services billed: {cat_list}.")
 
     # Due date
     if due_date:
@@ -304,7 +446,7 @@ def enrich_parsed(parsed: dict) -> dict:
     provider_raw = (parsed.get("provider") or "").lower()
     for key, desc in PROVIDERS.items():
         if key in provider_raw:
-            glossary[parsed["provider"]] = desc
+            glossary[parsed.get("provider", key)] = desc
             break
 
     # Generate English summary
