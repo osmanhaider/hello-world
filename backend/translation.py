@@ -360,8 +360,9 @@ import re as _re
 
 # Matches meter reading suffix embedded in line descriptions:
 # e.g. "Elekter päevane Alg: 9644 Löpp: 9726" or "Külm vesi Alg: 443,500 Löpp: 446,200"
+# The character class after 'L' tolerates OCR misreads of õ as ö / ó / é / è / ê.
 _METER_SUFFIX = _re.compile(
-    r"\s+[Aa]lg[:\s]+[\d,\.]+\s+[LlÖö][öo]pp[:\s]+[\d,\.]+",
+    r"\s+[Aa]lg[:\s]+[\d,\.]+\s+L[öõóéèêeoO0]?[pP]{1,2}[:\s]+[\d,\.]+",
     _re.IGNORECASE,
 )
 
