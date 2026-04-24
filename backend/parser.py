@@ -109,8 +109,8 @@ def _pdf_to_image(path: str) -> str:
 
 _PATTERNS = {
     "account_number": re.compile(r"Arve\s*nr\S*\s*[\s:\-—–]*\s*(\d+)", re.IGNORECASE),
-    "bill_date":      re.compile(r"Kuup[äa]ev\s*:?\s*(\d{1,2}[.\-/]\d{1,2}[.\-/]\d{4})", re.IGNORECASE),
-    "due_date":       re.compile(r"T[äa]htaeg\s*:?\s*(\d{1,2}[.\-/]\d{1,2}[.\-/]\d{4})", re.IGNORECASE),
+    "bill_date":      re.compile(r"Kuup[äa]ev\s*[:=\-—–]?\s*(\d{1,2}[.\-/]\d{1,2}[.\-/]\d{4})", re.IGNORECASE),
+    "due_date":       re.compile(r"T[äa]htaeg\s*[:=\-—–]?\s*(\d{1,2}[.\-/]\d{1,2}[.\-/]\d{4})", re.IGNORECASE),
     "reference":      re.compile(r"Viitenumber\s*:?\s*(\d+)", re.IGNORECASE),
     "period":         re.compile(r"Periood\s*:?\s*([A-Za-zÄÖÜÕäöüõ]+(?:\s+\d{4})?)", re.IGNORECASE),
     "net_area":       re.compile(r"Neto\s*pind\s*:?\s*([\d,.]+)\s*m[²2]?", re.IGNORECASE),
