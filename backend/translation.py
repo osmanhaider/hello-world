@@ -373,6 +373,46 @@ _PERIOD_PATTERN = _re.compile(
 )
 
 
+# Categories used for analytics breakdown. Order of the checks below matters:
+# heating must win over water for "vee soojendamine" (water heating), etc.
+_LINE_ITEM_CATEGORIES: list[tuple[str, list[str]]] = [
+    ("heating",     ["soojendamine", "küte", "soojus", "kaugküte"]),
+    ("electricity", ["elektri", "elekter", "võrgu", "aktsiis", "taastuvenergia",
+                     "energiatõhusus", "üldelekter", "üldelecter", "öine", "päevane",
+                     "öötariif", "reaktiiv", "võimsus", "universaalteenus",
+                     "bilansienergia"]),
+    ("gas",         ["maagaas", "gaas"]),
+    ("water",       ["vesi", " vee ", "kanalisatsioon", "üldvesi", "reovesi",
+                     "sademevesi", "ühisveevärk", "äravool"]),
+    ("waste",       ["prügi", "jäätme", "olmejäätmed", "biojäätmed", "pakend"]),
+    ("telecom",     ["internet", "lairiba", "telefon", "mobiilside",
+                     "televisioon", "kaabeltv", "kaabel"]),
+    ("management",  ["haldus", "raamatupidamis", "raamatupidamine", "tehnosüsteem", "hooldus",
+                     "koristus", "valve", "lift", "remondi", "remont",
+                     "porivaip", "üldkulud", "majanduskulud", "halduskulud",
+                     "fond", "renditeenus", "parkla", "garaaž"]),
+]
+
+
+def classify_line_item(description_et: str) -> str:
+    """Map an Estonian line-item description to a utility category.
+
+    Used for per-line-item analytics on korteriühistu bills, which bundle
+    electricity, water, heating, waste collection and building management
+    into a single invoice.
+    """
+    if not description_et:
+        return "other"
+    # Strip meter-reading suffix first so digits don't distract
+    d = _METER_SUFFIX.sub("", description_et).lower().strip()
+    # Pad with spaces so " vee " keyword can match word-boundary without regex
+    padded = f" {d} "
+    for category, keywords in _LINE_ITEM_CATEGORIES:
+        if any(k in padded for k in keywords):
+            return category
+    return "other"
+
+
 def translate_month_name(text: str) -> Optional[str]:
     """Return the English name of an Estonian month word, or None."""
     key = text.strip().lower()

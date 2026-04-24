@@ -10,7 +10,7 @@ from fastapi import FastAPI, File, UploadFile, HTTPException, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-from translation import enrich_parsed
+from translation import enrich_parsed, classify_line_item
 from parser import parse_bill as parse_bill_tesseract
 
 # Parser backend: "tesseract" (default, no API key) or "claude" (uses Anthropic API)
@@ -333,60 +333,17 @@ async def analytics_summary():
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
 
+        # Fetch every bill so we can split korteriühistu bills into their
+        # individual line-item categories (electricity, water, heating,
+        # waste, building management, …). For single-service bills we
+        # attribute the whole amount to the bill's utility_type.
         async with db.execute("""
-            SELECT
-                utility_type,
-                COUNT(*) as bill_count,
-                SUM(amount_eur) as total_eur,
-                AVG(amount_eur) as avg_eur,
-                MIN(amount_eur) as min_eur,
-                MAX(amount_eur) as max_eur,
-                SUM(consumption_kwh) as total_kwh,
-                SUM(consumption_m3) as total_m3
+            SELECT id, utility_type, amount_eur, consumption_kwh, consumption_m3,
+                   period_start, bill_date, upload_date, raw_json
             FROM bills
             WHERE amount_eur IS NOT NULL
-            GROUP BY utility_type
         """) as c:
-            by_type = [dict(r) for r in await c.fetchall()]
-
-        async with db.execute("""
-            SELECT
-                strftime('%Y-%m', COALESCE(period_start, bill_date, upload_date)) as month,
-                utility_type,
-                SUM(amount_eur) as total_eur,
-                COUNT(*) as bill_count
-            FROM bills
-            WHERE amount_eur IS NOT NULL
-            GROUP BY month, utility_type
-            ORDER BY month
-        """) as c:
-            by_month = [dict(r) for r in await c.fetchall()]
-
-        async with db.execute("""
-            SELECT
-                strftime('%Y', COALESCE(period_start, bill_date, upload_date)) as year,
-                utility_type,
-                SUM(amount_eur) as total_eur,
-                AVG(amount_eur) as avg_monthly_eur,
-                COUNT(*) as bill_count
-            FROM bills
-            WHERE amount_eur IS NOT NULL
-            GROUP BY year, utility_type
-            ORDER BY year
-        """) as c:
-            by_year = [dict(r) for r in await c.fetchall()]
-
-        async with db.execute("""
-            SELECT
-                strftime('%m', COALESCE(period_start, bill_date, upload_date)) as month_num,
-                AVG(amount_eur) as avg_eur,
-                utility_type
-            FROM bills
-            WHERE amount_eur IS NOT NULL
-            GROUP BY month_num, utility_type
-            ORDER BY month_num
-        """) as c:
-            seasonal = [dict(r) for r in await c.fetchall()]
+            all_bills = [dict(r) for r in await c.fetchall()]
 
         async with db.execute("""
             SELECT
@@ -411,6 +368,117 @@ async def analytics_summary():
             ORDER BY month
         """) as c:
             monthly_total = [dict(r) for r in await c.fetchall()]
+
+    # ────────────────────────────────────────────────────────────────────
+    # Per-category breakdown.
+    # Split each korteriühistu bill (utility_type="other") into its
+    # individual line-item categories so the Type Breakdown chart shows a
+    # meaningful split instead of one giant "other" slice. Single-service
+    # bills contribute their whole amount under their utility_type.
+    # ────────────────────────────────────────────────────────────────────
+    from collections import defaultdict
+
+    # type_agg[utility_type] = {total_eur, amounts [for min/max/avg/count],
+    #                           total_kwh, total_m3}
+    type_agg: dict[str, dict] = defaultdict(
+        lambda: {"amounts": [], "total_kwh": 0.0, "total_m3": 0.0,
+                 "has_kwh": False, "has_m3": False}
+    )
+    # month_agg[(month, utility_type)] = total_eur
+    month_agg: dict[tuple[str, str], float] = defaultdict(float)
+    month_bill_count: dict[tuple[str, str], int] = defaultdict(int)
+    # year_agg[(year, utility_type)] = [amounts]
+    year_agg: dict[tuple[str, str], list[float]] = defaultdict(list)
+    # seasonal_agg[(month_num, utility_type)] = [amounts]
+    seasonal_agg: dict[tuple[str, str], list[float]] = defaultdict(list)
+
+    for bill in all_bills:
+        date_key = bill["period_start"] or bill["bill_date"] or bill["upload_date"]
+        if not date_key or len(date_key) < 7:
+            continue
+        month_key = date_key[:7]
+        year_key = date_key[:4]
+        month_num = date_key[5:7]
+        bill_type = bill["utility_type"] or "other"
+
+        # For korteriühistu bills we split by line-item category; for
+        # everything else we attribute the full invoice to the bill's type.
+        contributions: list[tuple[str, float]] = []
+        if bill_type == "other" and bill["raw_json"]:
+            try:
+                raw = json.loads(bill["raw_json"])
+            except (json.JSONDecodeError, TypeError):
+                raw = {}
+            items = raw.get("line_items") or []
+            for item in items:
+                amt = item.get("amount_eur")
+                if amt is None:
+                    continue
+                cat = classify_line_item(item.get("description_et") or "")
+                contributions.append((cat, float(amt)))
+            # Fall back to whole-bill attribution if no line items parsed
+            if not contributions and bill["amount_eur"] is not None:
+                contributions = [("other", float(bill["amount_eur"]))]
+        elif bill["amount_eur"] is not None:
+            contributions = [(bill_type, float(bill["amount_eur"]))]
+
+        for cat, amt in contributions:
+            type_agg[cat]["amounts"].append(amt)
+            month_agg[(month_key, cat)] += amt
+            month_bill_count[(month_key, cat)] += 1
+            year_agg[(year_key, cat)].append(amt)
+            seasonal_agg[(month_num, cat)].append(amt)
+
+        # Consumption totals stay at the bill level — we only know kWh/m³
+        # totals for the whole bill, not per line item
+        primary_cat = contributions[0][0] if contributions else bill_type
+        if bill["consumption_kwh"] is not None:
+            type_agg[primary_cat]["total_kwh"] += float(bill["consumption_kwh"])
+            type_agg[primary_cat]["has_kwh"] = True
+        if bill["consumption_m3"] is not None:
+            type_agg[primary_cat]["total_m3"] += float(bill["consumption_m3"])
+            type_agg[primary_cat]["has_m3"] = True
+
+    def _stats(amts: list[float]) -> dict:
+        return {
+            "bill_count": len(amts),
+            "total_eur": round(sum(amts), 2),
+            "avg_eur": round(sum(amts) / len(amts), 2) if amts else 0.0,
+            "min_eur": round(min(amts), 2) if amts else 0.0,
+            "max_eur": round(max(amts), 2) if amts else 0.0,
+        }
+
+    by_type = []
+    for utype, agg in sorted(type_agg.items(), key=lambda kv: -sum(kv[1]["amounts"])):
+        s = _stats(agg["amounts"])
+        by_type.append({
+            "utility_type": utype,
+            **s,
+            "total_kwh": round(agg["total_kwh"], 2) if agg["has_kwh"] else None,
+            "total_m3": round(agg["total_m3"], 2) if agg["has_m3"] else None,
+        })
+
+    by_month = sorted(
+        [{"month": m, "utility_type": t, "total_eur": round(v, 2),
+          "bill_count": month_bill_count[(m, t)]}
+         for (m, t), v in month_agg.items()],
+        key=lambda r: (r["month"], r["utility_type"]),
+    )
+
+    by_year = sorted(
+        [{"year": y, "utility_type": t, "total_eur": round(sum(amts), 2),
+          "avg_monthly_eur": round(sum(amts) / len(amts), 2) if amts else 0.0,
+          "bill_count": len(amts)}
+         for (y, t), amts in year_agg.items()],
+        key=lambda r: (r["year"], r["utility_type"]),
+    )
+
+    seasonal = sorted(
+        [{"month_num": mn, "utility_type": t,
+          "avg_eur": round(sum(amts) / len(amts), 2) if amts else 0.0}
+         for (mn, t), amts in seasonal_agg.items()],
+        key=lambda r: (r["month_num"], r["utility_type"]),
+    )
 
     # Compute rolling 3-month average on total
     for i, row in enumerate(monthly_total):
