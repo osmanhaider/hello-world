@@ -146,3 +146,49 @@ def parse_bill_with_openrouter(
                 f"First 200 chars: {text[:200]!r}"
             ) from None
         return json.loads(text[start : end + 1])
+
+
+def _is_retryable(e: Exception) -> bool:
+    """Should we move to the next model, or give up entirely?"""
+    from openai import APIError, NotFoundError, RateLimitError
+
+    if isinstance(e, (NotFoundError, RateLimitError)):
+        return True  # 404 delisted / 429 rate-limited
+    if isinstance(e, APIError) and getattr(e, "status_code", 0) >= 500:
+        return True  # upstream provider errors
+    # Our own "empty response" / "non-JSON output" errors
+    return isinstance(e, RuntimeError)
+
+
+def parse_bill_with_openrouter_chain(
+    file_path: str,
+    api_key: str | None,
+    models: list[str],
+) -> dict:
+    """Try each model in order. Return the first success, with metadata
+    recording which models were tried and which one produced the result.
+    Raises the last exception if every model fails."""
+    if not models:
+        raise RuntimeError("No OpenRouter models to try.")
+
+    failures: list[str] = []
+    last_exc: Exception | None = None
+    for m in models:
+        try:
+            result = parse_bill_with_openrouter(file_path, api_key=api_key, model=m)
+        except Exception as e:
+            if not _is_retryable(e):
+                raise
+            failures.append(f"{m} → {type(e).__name__}: {str(e)[:120]}")
+            last_exc = e
+            continue
+        result["_model_used"] = m
+        if failures:
+            result["_models_tried"] = failures
+        return result
+
+    # Every model failed
+    raise RuntimeError(
+        f"All {len(models)} OpenRouter models failed. "
+        + " | ".join(failures)
+    ) from last_exc

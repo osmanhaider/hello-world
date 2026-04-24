@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from parser import parse_bill as parse_bill_tesseract
-from parser_openrouter import parse_bill_with_openrouter
+from parser_openrouter import parse_bill_with_openrouter_chain
 from translation import classify_line_item, enrich_parsed
 
 logger = logging.getLogger("utility_tracker")
@@ -246,10 +246,14 @@ async def upload_bill(
         if effective_parser == "claude":
             parsed = parse_bill_with_claude(save_path)
         elif effective_parser == "openrouter":
-            parsed = parse_bill_with_openrouter(
+            # Auto-fallback: try the user's selected model first, then
+            # cascade through the top free vision models if it's delisted,
+            # rate-limited, or returns junk.
+            chain = await _build_openrouter_chain(model or OPENROUTER_MODEL)
+            parsed = parse_bill_with_openrouter_chain(
                 save_path,
                 api_key=OPENROUTER_API_KEY,
-                model=model or OPENROUTER_MODEL,
+                models=chain,
             )
         else:
             parsed = parse_bill_tesseract(save_path)
@@ -427,20 +431,19 @@ async def delete_bill(bill_id: str):
 # cache keeps us fresh without hammering their API on every upload tab load.
 _openrouter_cache: dict = {"expires": 0.0, "models": []}
 _OPENROUTER_CACHE_TTL = 3600  # 1 hour
+_OPENROUTER_FALLBACK = [
+    {"id": "google/gemini-2.0-flash-exp:free", "label": "Gemini 2.0 Flash (fallback)"},
+]
 
 
-@app.get("/api/openrouter-models")
-async def openrouter_models():
-    """Return the currently-available free vision models on OpenRouter.
-    Cached for 1 hour. Falls back to a hardcoded list if OpenRouter is
-    unreachable."""
+async def _fetch_openrouter_free_vision() -> list[dict]:
+    """Return the cached (or freshly fetched) list of free vision models.
+    Always returns at least one entry — falls back to a hardcoded default
+    if OpenRouter is unreachable or returns nothing useful."""
     now = time.time()
     if _openrouter_cache["expires"] > now and _openrouter_cache["models"]:
-        return {"models": _openrouter_cache["models"], "cached": True}
+        return _openrouter_cache["models"]
 
-    fallback = [
-        {"id": "google/gemini-2.0-flash-exp:free", "label": "Gemini 2.0 Flash (fallback)"},
-    ]
     try:
         async with httpx.AsyncClient(timeout=10.0) as c:
             r = await c.get("https://openrouter.ai/api/v1/models")
@@ -448,12 +451,11 @@ async def openrouter_models():
             data = r.json()
     except Exception:
         logger.exception("Failed to fetch OpenRouter model list")
-        return {"models": fallback, "cached": False, "error": "Could not fetch live list — using fallback."}
+        return _OPENROUTER_FALLBACK
 
     free_vision: list[dict] = []
     for m in data.get("data", []):
         pricing = m.get("pricing") or {}
-        # Free means both prompt and completion are priced at 0
         if str(pricing.get("prompt", "")) != "0" or str(pricing.get("completion", "")) != "0":
             continue
         modalities = (m.get("architecture") or {}).get("input_modalities") or []
@@ -464,7 +466,6 @@ async def openrouter_models():
         if mid:
             free_vision.append({"id": mid, "label": name})
 
-    # Sort so the best-known vendors float to the top
     priority = ["google/", "meta-llama/", "qwen/", "mistralai/"]
     def _rank(m: dict) -> int:
         for i, p in enumerate(priority):
@@ -474,11 +475,36 @@ async def openrouter_models():
     free_vision.sort(key=lambda m: (_rank(m), m["id"]))
 
     if not free_vision:
-        free_vision = fallback
+        free_vision = _OPENROUTER_FALLBACK
 
     _openrouter_cache["models"] = free_vision
     _openrouter_cache["expires"] = now + _OPENROUTER_CACHE_TTL
-    return {"models": free_vision, "cached": False}
+    return free_vision
+
+
+@app.get("/api/openrouter-models")
+async def openrouter_models():
+    """Return currently-available free vision models on OpenRouter."""
+    cached_at = _openrouter_cache["expires"]
+    models = await _fetch_openrouter_free_vision()
+    return {"models": models, "cached": cached_at > time.time()}
+
+
+async def _build_openrouter_chain(user_model: str, max_models: int = 4) -> list[str]:
+    """Build a fallback chain starting with the user's pick, followed by
+    the top free vision models from the live list. Deduplicates."""
+    chain = [user_model]
+    try:
+        live = await _fetch_openrouter_free_vision()
+    except Exception:
+        live = []
+    for m in live:
+        mid = m.get("id")
+        if mid and mid not in chain and not mid.startswith("__"):
+            chain.append(mid)
+        if len(chain) >= max_models:
+            break
+    return chain
 
 
 @app.get("/api/analytics/summary")

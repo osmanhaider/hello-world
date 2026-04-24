@@ -290,6 +290,23 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
         </div>
       )}
 
+      {isSuccess && parsed && Array.isArray(parsed._models_tried) && parsed._models_tried.length > 0 && parsed._model_used ? (
+        <div style={{
+          ...cardStyle,
+          marginTop: 16,
+          borderLeft: "3px solid #2563eb",
+          padding: "10px 14px",
+          fontSize: 12,
+        }}>
+          <div style={{ color: "#93c5fd", fontWeight: 600, marginBottom: 4 }}>
+            Auto-fallback used: succeeded with <code>{String(parsed._model_used)}</code>
+          </div>
+          <div style={{ color: "#6b7280" }}>
+            Previous attempts: {(parsed._models_tried as string[]).join(" · ")}
+          </div>
+        </div>
+      ) : null}
+
       {isSuccess && parsed && (
         <>
           <div style={{ ...cardStyle, marginTop: 24 }}>
