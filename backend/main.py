@@ -83,7 +83,9 @@ def parse_bill_with_claude(file_path: str) -> dict:
 
     prompt = """You are an expert at extracting information from Estonian utility bills (electricity, gas, water, heating, internet, etc.).
 
-Analyze this utility bill image and extract all available information. Return ONLY a valid JSON object with these fields:
+The bill is likely in Estonian. Extract information AND translate all Estonian text into English.
+
+Return ONLY a valid JSON object with these fields:
 {
   "provider": "company name (e.g. Eesti Energia, Elering, Tallinna Vesi, Gasum, Telia, etc.)",
   "utility_type": "one of: electricity, gas, water, heating, internet, waste, other",
@@ -100,15 +102,31 @@ Analyze this utility bill image and extract all available information. Return ON
   "meter_reading_start": numeric start meter reading if shown,
   "meter_reading_end": numeric end meter reading if shown,
   "due_date": "YYYY-MM-DD format of payment due date",
+  "translated_summary": "A concise 2-3 sentence English summary of what this bill is for, the period, and any notable context (price changes, reminders, promotions, late fees, etc.)",
+  "line_items": [
+    {
+      "description_et": "original Estonian line item description (e.g. 'Elektrienergia', 'Võrgutasu', 'Aktsiis', 'Taastuvenergia tasu')",
+      "description_en": "English translation (e.g. 'Electricity', 'Grid fee', 'Excise duty', 'Renewable energy fee')",
+      "amount_eur": numeric amount in euros for this line (can be null),
+      "quantity": numeric quantity if shown (can be null),
+      "unit": "unit like kWh, m3, pcs (can be null)"
+    }
+  ],
+  "glossary": {
+    "estonian_term": "english translation"
+  },
   "confidence": "high/medium/low based on image quality and clarity"
 }
+
+For "line_items", include every charge/line visible on the bill (energy, grid fees, taxes, excise, renewable fees, fixed fees, VAT, discounts).
+For "glossary", include 5-10 of the most important Estonian terms from the bill with their English translations so a non-Estonian speaker understands the document.
 
 If a field cannot be determined, use null. Return only the JSON, no explanation."""
 
     if media_type == "application/pdf":
         message = client.messages.create(
             model="claude-sonnet-4-6",
-            max_tokens=1024,
+            max_tokens=2048,
             messages=[{
                 "role": "user",
                 "content": [
@@ -119,7 +137,7 @@ If a field cannot be determined, use null. Return only the JSON, no explanation.
     else:
         message = client.messages.create(
             model="claude-sonnet-4-6",
-            max_tokens=1024,
+            max_tokens=2048,
             messages=[{
                 "role": "user",
                 "content": [

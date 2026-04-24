@@ -119,30 +119,84 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
       </div>
 
       {status === "success" && parsed && (
-        <div style={{ ...cardStyle, marginTop: 24 }}>
-          <h3 style={{ color: "white", margin: "0 0 16px", fontSize: 16 }}>
-            {UTILITY_ICONS[parsed.utility_type as string] || "📄"} Extracted Details
-          </h3>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 24px" }}>
-            {[
-              ["Provider", parsed.provider],
-              ["Type", parsed.utility_type],
-              ["Amount", parsed.amount_eur != null ? `€${(parsed.amount_eur as number).toFixed(2)}` : null],
-              ["Bill Date", parsed.bill_date],
-              ["Period", parsed.period_start && parsed.period_end ? `${parsed.period_start} → ${parsed.period_end}` : null],
-              ["Consumption", parsed.consumption_kwh != null ? `${parsed.consumption_kwh} kWh` : parsed.consumption_m3 != null ? `${parsed.consumption_m3} m³` : null],
-              ["Account", parsed.account_number],
-              ["Confidence", parsed.confidence],
-            ].map(([label, value]) =>
-              value ? (
-                <div key={String(label)}>
-                  <div style={{ fontSize: 11, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>{String(label)}</div>
-                  <div style={{ fontSize: 14, color: "#e5e7eb", marginTop: 2 }}>{String(value)}</div>
-                </div>
-              ) : null
-            )}
+        <>
+          <div style={{ ...cardStyle, marginTop: 24 }}>
+            <h3 style={{ color: "white", margin: "0 0 16px", fontSize: 16 }}>
+              {UTILITY_ICONS[parsed.utility_type as string] || "📄"} Extracted Details
+            </h3>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 24px" }}>
+              {[
+                ["Provider", parsed.provider],
+                ["Type", parsed.utility_type],
+                ["Amount", parsed.amount_eur != null ? `€${(parsed.amount_eur as number).toFixed(2)}` : null],
+                ["Bill Date", parsed.bill_date],
+                ["Period", parsed.period_start && parsed.period_end ? `${parsed.period_start} → ${parsed.period_end}` : null],
+                ["Consumption", parsed.consumption_kwh != null ? `${parsed.consumption_kwh} kWh` : parsed.consumption_m3 != null ? `${parsed.consumption_m3} m³` : null],
+                ["Account", parsed.account_number],
+                ["Confidence", parsed.confidence],
+              ].map(([label, value]) =>
+                value ? (
+                  <div key={String(label)}>
+                    <div style={{ fontSize: 11, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>{String(label)}</div>
+                    <div style={{ fontSize: 14, color: "#e5e7eb", marginTop: 2 }}>{String(value)}</div>
+                  </div>
+                ) : null
+              )}
+            </div>
           </div>
-        </div>
+
+          {parsed.translated_summary ? (
+            <div style={{ ...cardStyle, marginTop: 16, borderLeft: "3px solid #2563eb" }}>
+              <div style={{ fontSize: 11, color: "#2563eb", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6, fontWeight: 600 }}>
+                🌍 English Summary
+              </div>
+              <div style={{ fontSize: 14, color: "#e5e7eb", lineHeight: 1.5 }}>
+                {String(parsed.translated_summary)}
+              </div>
+            </div>
+          ) : null}
+
+          {Array.isArray(parsed.line_items) && parsed.line_items.length > 0 ? (
+            <div style={{ ...cardStyle, marginTop: 16 }}>
+              <h3 style={{ color: "white", margin: "0 0 12px", fontSize: 14 }}>Line Items (Estonian → English)</h3>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                <thead>
+                  <tr style={{ borderBottom: "1px solid #2d3148" }}>
+                    <th style={{ padding: "8px 0", textAlign: "left", color: "#6b7280", fontSize: 11, textTransform: "uppercase", fontWeight: 600 }}>Estonian</th>
+                    <th style={{ padding: "8px 0", textAlign: "left", color: "#6b7280", fontSize: 11, textTransform: "uppercase", fontWeight: 600 }}>English</th>
+                    <th style={{ padding: "8px 0", textAlign: "right", color: "#6b7280", fontSize: 11, textTransform: "uppercase", fontWeight: 600 }}>Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(parsed.line_items as Array<Record<string, unknown>>).map((li, i) => (
+                    <tr key={i} style={{ borderBottom: "1px solid #1e2132" }}>
+                      <td style={{ padding: "8px 8px 8px 0", color: "#9ca3af" }}>{String(li.description_et ?? "—")}</td>
+                      <td style={{ padding: "8px 0", color: "#e5e7eb" }}>{String(li.description_en ?? "—")}</td>
+                      <td style={{ padding: "8px 0", textAlign: "right", color: "#22c55e", fontVariantNumeric: "tabular-nums" }}>
+                        {li.amount_eur != null ? `€${(li.amount_eur as number).toFixed(2)}` : "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+
+          {parsed.glossary && typeof parsed.glossary === "object" && Object.keys(parsed.glossary as object).length > 0 ? (
+            <div style={{ ...cardStyle, marginTop: 16 }}>
+              <h3 style={{ color: "white", margin: "0 0 12px", fontSize: 14 }}>📖 Glossary</h3>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 8 }}>
+                {Object.entries(parsed.glossary as Record<string, string>).map(([et, en]) => (
+                  <div key={et} style={{ background: "#252838", padding: "8px 12px", borderRadius: 6, fontSize: 13 }}>
+                    <span style={{ color: "#9ca3af" }}>{et}</span>
+                    <span style={{ color: "#6b7280", margin: "0 6px" }}>→</span>
+                    <span style={{ color: "#e5e7eb" }}>{en}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </>
       )}
 
       <div style={{ ...cardStyle, marginTop: 24 }}>

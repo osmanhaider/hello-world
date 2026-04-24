@@ -123,6 +123,15 @@ export default function BillsTab() {
 
               {isOpen && (
                 <div style={{ borderTop: "1px solid #2d3148", padding: "16px 20px" }}>
+                  {raw.translated_summary && (
+                    <div style={{ marginBottom: 16, padding: "12px 14px", background: "#1e2640", borderLeft: "3px solid #2563eb", borderRadius: 6 }}>
+                      <div style={{ fontSize: 11, color: "#2563eb", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4, fontWeight: 600 }}>
+                        🌍 English Summary
+                      </div>
+                      <div style={{ fontSize: 13, color: "#e5e7eb", lineHeight: 1.5 }}>{raw.translated_summary}</div>
+                    </div>
+                  )}
+
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: "12px 24px" }}>
                     {[
                       ["Account #", bill.account_number],
@@ -142,6 +151,52 @@ export default function BillsTab() {
                       </div>
                     ) : null)}
                   </div>
+
+                  {Array.isArray(raw.line_items) && raw.line_items.length > 0 && (
+                    <div style={{ marginTop: 16 }}>
+                      <div style={{ fontSize: 11, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8, fontWeight: 600 }}>
+                        Line Items (Estonian → English)
+                      </div>
+                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                        <thead>
+                          <tr style={{ borderBottom: "1px solid #2d3148" }}>
+                            <th style={{ padding: "6px 0", textAlign: "left", color: "#6b7280", fontSize: 11, fontWeight: 600 }}>ESTONIAN</th>
+                            <th style={{ padding: "6px 0", textAlign: "left", color: "#6b7280", fontSize: 11, fontWeight: 600 }}>ENGLISH</th>
+                            <th style={{ padding: "6px 0", textAlign: "right", color: "#6b7280", fontSize: 11, fontWeight: 600 }}>AMOUNT</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(raw.line_items as Array<Record<string, unknown>>).map((li, i) => (
+                            <tr key={i} style={{ borderBottom: "1px solid #1e2132" }}>
+                              <td style={{ padding: "6px 8px 6px 0", color: "#9ca3af" }}>{String(li.description_et ?? "—")}</td>
+                              <td style={{ padding: "6px 0", color: "#e5e7eb" }}>{String(li.description_en ?? "—")}</td>
+                              <td style={{ padding: "6px 0", textAlign: "right", color: "#22c55e", fontVariantNumeric: "tabular-nums" }}>
+                                {li.amount_eur != null ? `€${(li.amount_eur as number).toFixed(2)}` : "—"}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  {raw.glossary && typeof raw.glossary === "object" && Object.keys(raw.glossary).length > 0 && (
+                    <div style={{ marginTop: 16 }}>
+                      <div style={{ fontSize: 11, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8, fontWeight: 600 }}>
+                        📖 Glossary
+                      </div>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 6 }}>
+                        {Object.entries(raw.glossary as Record<string, string>).map(([et, en]) => (
+                          <div key={et} style={{ background: "#252838", padding: "6px 10px", borderRadius: 6, fontSize: 12 }}>
+                            <span style={{ color: "#9ca3af" }}>{et}</span>
+                            <span style={{ color: "#6b7280", margin: "0 6px" }}>→</span>
+                            <span style={{ color: "#e5e7eb" }}>{en}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   {bill.notes && (
                     <div style={{ marginTop: 12, padding: "10px 14px", background: "#252838", borderRadius: 6, fontSize: 13, color: "#9ca3af" }}>
                       {bill.notes}
