@@ -105,6 +105,50 @@ def _pdf_to_image(path: str) -> str:
     return tmp
 
 
+def pdf_native_words(path: str) -> tuple[str, list[dict]]:
+    """Extract words + bounding boxes from a native-text PDF using pdfplumber.
+    Returns (full_text, word_boxes) in the same shape as ocr_image().
+    If the PDF has no extractable text (scanned), returns ('', [])."""
+    import pdfplumber
+    boxes: list[dict] = []
+    all_text: list[str] = []
+    with pdfplumber.open(path) as pdf:
+        if not pdf.pages:
+            return "", []
+        for page_num, page in enumerate(pdf.pages[:1]):  # first page only (like OCR path)
+            words = page.extract_words(
+                x_tolerance=2,
+                y_tolerance=3,
+                keep_blank_chars=False,
+                use_text_flow=True,
+            )
+            if not words:
+                return "", []
+            # Build synthetic line numbers by grouping words with similar y
+            # coordinates (within 4px). Sort top-to-bottom, then left-to-right.
+            words.sort(key=lambda w: (round(float(w["top"]) / 4), float(w["x0"])))
+            current_line = -10
+            line_num = 0
+            for w in words:
+                top = float(w["top"])
+                if top - current_line > 4:
+                    line_num += 1
+                    current_line = top
+                boxes.append({
+                    "text": w["text"],
+                    "left": int(w["x0"]),
+                    "top": int(w["top"]),
+                    "width": int(w["x1"] - w["x0"]),
+                    "height": int(w["bottom"] - w["top"]),
+                    "conf": 100.0,          # native text = perfect confidence
+                    "line_num": line_num,
+                    "block_num": 1,
+                    "par_num": 1,
+                })
+            all_text.append(page.extract_text() or "")
+    return "\n".join(all_text), boxes
+
+
 # ── Field extractors ───────────────────────────────────────────────────────
 
 _PATTERNS = {
@@ -294,53 +338,50 @@ def totals_from_line_items(items: list[dict]) -> tuple[Optional[float], Optional
 
 def parse_bill(path: str) -> dict:
     """Full open-source extraction pipeline. Returns the same dict shape
-    that the Claude-based parser used to return."""
-    # If it's a PDF, render the first page to an image for OCR
+    that the Claude-based parser used to return.
+
+    Strategy:
+      PDF (native text)   → pdfplumber words   → high confidence
+      PDF (scanned)       → pdf2image + OCR    → medium confidence
+      Image (png/jpg/etc) → Tesseract OCR      → medium confidence
+    """
+    source = "tesseract"
+    confidence = "medium"
+
     if path.lower().endswith(".pdf"):
+        # 1. Try native-text extraction first (most utility bills are vector PDFs)
         try:
-            import pdfplumber
-            # Try text extraction first (many bills are vector PDFs)
-            with pdfplumber.open(path) as pdf:
-                text = (pdf.pages[0].extract_text() if pdf.pages else "") or ""
-            if len(text) > 80:  # heuristic: enough text extracted
-                header = extract_header(text)
-                # Can't use column-based table extraction on PDF text alone —
-                # fall back to OCR for the table
-                img_path = _pdf_to_image(path)
-                _, boxes = ocr_image(img_path)
-                line_items = extract_line_items(boxes)
-                try:
-                    os.remove(img_path)
-                except OSError:
-                    pass
-            else:
-                img_path = _pdf_to_image(path)
-                text, boxes = ocr_image(img_path)
-                header = extract_header(text)
-                line_items = extract_line_items(boxes)
-                try:
-                    os.remove(img_path)
-                except OSError:
-                    pass
+            text, boxes = pdf_native_words(path)
         except Exception:
-            # Fall back to pure OCR
+            text, boxes = "", []
+
+        if len(text) > 80 and len(boxes) > 20:
+            # Native text is available — use it directly, no OCR needed
+            source = "pdfplumber"
+            confidence = "high"
+        else:
+            # Scanned PDF: rasterize then OCR
             img_path = _pdf_to_image(path)
-            text, boxes = ocr_image(img_path)
-            header = extract_header(text)
-            line_items = extract_line_items(boxes)
+            try:
+                text, boxes = ocr_image(img_path)
+            finally:
+                try:
+                    os.remove(img_path)
+                except OSError:
+                    pass
     else:
         text, boxes = ocr_image(path)
-        header = extract_header(text)
-        line_items = extract_line_items(boxes)
+
+    header = extract_header(text)
+    line_items = extract_line_items(boxes)
 
     kwh, m3 = totals_from_line_items(line_items)
-    result = {
+    return {
         **header,
         "utility_type": classify(header.get("provider", ""), line_items),
         "line_items": line_items,
         "consumption_kwh": kwh,
         "consumption_m3": m3,
-        "confidence": "medium",  # OCR is never 'high'
-        "_source": "tesseract",
+        "confidence": confidence,
+        "_source": source,
     }
-    return result
