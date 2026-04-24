@@ -671,11 +671,22 @@ export default function AnalyticsTab() {
                 data={data.by_type}
                 dataKey="total_eur"
                 nameKey="utility_type"
-                cx="50%" cy="50%"
-                innerRadius={60}
-                outerRadius={100}
+                cx="50%" cy="45%"
+                innerRadius={55}
+                outerRadius={95}
                 paddingAngle={2}
-                label={({ name, percent }) => `${labelFor(name)} ${((percent ?? 0) * 100).toFixed(0)}%`}
+                label={({ cx, cy, midAngle, innerRadius, outerRadius, percent }) => {
+                  if (!percent || percent < 0.04) return null;
+                  const RAD = Math.PI / 180;
+                  const r = (innerRadius + outerRadius) / 2;
+                  const x = cx + r * Math.cos(-midAngle * RAD);
+                  const y = cy + r * Math.sin(-midAngle * RAD);
+                  return (
+                    <text x={x} y={y} fill="white" textAnchor="middle" dominantBaseline="central" fontSize={12} fontWeight={600}>
+                      {`${(percent * 100).toFixed(0)}%`}
+                    </text>
+                  );
+                }}
                 labelLine={false}
               >
                 {data.by_type.map((entry, i) => (
@@ -683,6 +694,12 @@ export default function AnalyticsTab() {
                 ))}
               </Pie>
               <Tooltip content={<RichTooltip unit="€" />} cursor={{ fill: "rgba(148,163,184,0.08)" }} />
+              <Legend
+                verticalAlign="bottom"
+                iconType="circle"
+                wrapperStyle={{ fontSize: 12, paddingTop: 8 }}
+                formatter={(value: string) => <span style={{ color: "#e5e7eb" }}>{labelFor(value)}</span>}
+              />
             </PieChart>
           </ResponsiveContainer>
         </ChartCard>
