@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 
 import aiosqlite
 import httpx
-from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -32,8 +32,23 @@ DB_PATH = os.environ.get("DB_PATH", "bills.db")
 UPLOADS_DIR = os.environ.get("UPLOADS_DIR", "uploads")
 os.makedirs(UPLOADS_DIR, exist_ok=True)
 
+# Connection-level busy timeout — SQLite serialises writes, so under
+# concurrent uploads from multiple browsers a writer can otherwise hit
+# "database is locked" almost immediately. 10 s is comfortably longer
+# than any single write transaction in this app.
+DB_BUSY_TIMEOUT_SEC = 10.0
+
+# user_id assigned to bills uploaded while auth is disabled (local dev),
+# and the migration target for legacy rows that predate user-scoping.
+_DEFAULT_USER_ID = "default"
+
+
+def _db():
+    """Open a SQLite connection with our shared busy-timeout."""
+    return aiosqlite.connect(DB_PATH, timeout=DB_BUSY_TIMEOUT_SEC)
+
 # Hard cap on upload size — protects against memory exhaustion from huge files.
-MAX_UPLOAD_BYTES = int(os.environ.get("MAX_UPLOAD_BYTES", 20 * 1024 * 1024))  # 20 MB
+MAX_UPLOAD_BYTES = int(os.environ.get("MAX_UPLOAD_BYTES", 25 * 1024 * 1024))  # 25 MB
 
 # Allowed filename extensions (lowercased). The MIME check below is the
 # primary gate; this second check rejects mismatched / hostile filenames.
@@ -51,7 +66,12 @@ _EDITABLE_BILL_COLUMNS = frozenset({
 
 
 async def init_db() -> None:
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _db() as db:
+        # WAL mode lets readers and a single writer proceed concurrently
+        # instead of blocking each other — important when several browsers
+        # are uploading bills at the same time. Setting persists in the
+        # database header so this runs once per database.
+        await db.execute("PRAGMA journal_mode=WAL")
         await db.execute("""
             CREATE TABLE IF NOT EXISTS bills (
                 id TEXT PRIMARY KEY,
@@ -71,6 +91,22 @@ async def init_db() -> None:
                 notes TEXT
             )
         """)
+        # Migration: add user_id to existing databases that were created
+        # before per-user scoping. Backfilling to "default" keeps local-dev
+        # data visible (auth-disabled mode also uses "default"); in
+        # auth-enabled production these legacy rows become orphans, which
+        # is intentional — they were uploaded by no particular user.
+        async with db.execute("PRAGMA table_info(bills)") as c:
+            cols = {row[1] for row in await c.fetchall()}
+        if "user_id" not in cols:
+            await db.execute("ALTER TABLE bills ADD COLUMN user_id TEXT")
+            await db.execute(
+                "UPDATE bills SET user_id = ? WHERE user_id IS NULL",
+                (_DEFAULT_USER_ID,),
+            )
+        await db.execute(
+            "CREATE INDEX IF NOT EXISTS bills_user_id_idx ON bills(user_id)"
+        )
         await db.commit()
 
 
@@ -119,7 +155,10 @@ async def auth_middleware(request: Request, call_next):
     # custom headers (including Authorization) before sending them.
     if request.method == "OPTIONS":
         return await call_next(request)
+    # Auth disabled (local dev): everyone shares the "default" data space
+    # so existing bills stay visible and dev workflows don't change.
     if not auth_mod.auth_enabled():
+        request.state.user_id = _DEFAULT_USER_ID
         return await call_next(request)
     path = request.url.path
     if not path.startswith("/api/") or path in _AUTH_EXEMPT_PATHS:
@@ -128,10 +167,18 @@ async def auth_middleware(request: Request, call_next):
     if not header.lower().startswith("bearer "):
         return JSONResponse({"detail": "Missing bearer token"}, status_code=401)
     try:
-        auth_mod.verify_token(header[7:].strip())
+        payload = auth_mod.verify_token(header[7:].strip())
     except auth_mod.AuthError as e:
         return JSONResponse({"detail": f"Invalid token: {e}"}, status_code=401)
+    # Tokens issued before per-user scoping have no `sub` — map them to
+    # the legacy "default" space so they keep working for one TTL window.
+    request.state.user_id = payload.get("sub") or _DEFAULT_USER_ID
     return await call_next(request)
+
+
+def get_user_id(request: Request) -> str:
+    """Resolve the caller's user_id, set by auth_middleware."""
+    return getattr(request.state, "user_id", _DEFAULT_USER_ID)
 
 
 if auth_mod.auth_enabled() and not auth_mod.AUTH_SECRET:
@@ -159,7 +206,10 @@ async def auth_login(body: LoginRequest):
         return {"token": "disabled", "auth_required": False}
     if not auth_mod.verify_password(body.password):
         raise HTTPException(401, "Invalid password")
-    return {"token": auth_mod.create_token(), "auth_required": True}
+    # Each successful login mints a fresh user_id, so two browsers sharing
+    # the same demo password get separate, isolated data spaces.
+    user_id = uuid.uuid4().hex
+    return {"token": auth_mod.create_token(user_id), "auth_required": True}
 
 
 class BillUpdate(BaseModel):
@@ -285,6 +335,7 @@ async def upload_bill(
     file: UploadFile = File(...),
     parser: str | None = Form(None),
     model: str | None = Form(None),
+    user_id: str = Depends(get_user_id),
 ):
     if file.content_type not in _ALLOWED_MIME:
         raise HTTPException(400, "Unsupported file type. Upload an image or PDF.")
@@ -349,13 +400,15 @@ async def upload_bill(
     replaced = False
     replaced_id: str | None = None
 
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _db() as db:
+        # All dedupe lookups are scoped to the caller's user_id so one
+        # user's upload can never overwrite another user's bill.
         # 1st priority: same filename → same physical file uploaded again
         existing_row = None
         async with db.execute(
-            "SELECT id, filename FROM bills WHERE filename = ? "
+            "SELECT id, filename FROM bills WHERE filename = ? AND user_id = ? "
             "ORDER BY upload_date DESC LIMIT 1",
-            (file.filename,),
+            (file.filename, user_id),
         ) as c:
             existing_row = await c.fetchone()
 
@@ -363,9 +416,9 @@ async def upload_bill(
         if not existing_row and provider and period_start:
             async with db.execute(
                 "SELECT id, filename FROM bills "
-                "WHERE LOWER(TRIM(provider)) = LOWER(TRIM(?)) AND period_start = ? "
+                "WHERE LOWER(TRIM(provider)) = LOWER(TRIM(?)) AND period_start = ? AND user_id = ? "
                 "ORDER BY upload_date DESC LIMIT 1",
-                (provider, period_start),
+                (provider, period_start, user_id),
             ) as c:
                 existing_row = await c.fetchone()
 
@@ -373,9 +426,9 @@ async def upload_bill(
         if not existing_row and provider and account_number:
             async with db.execute(
                 "SELECT id, filename FROM bills "
-                "WHERE LOWER(TRIM(provider)) = LOWER(TRIM(?)) AND account_number = ? "
+                "WHERE LOWER(TRIM(provider)) = LOWER(TRIM(?)) AND account_number = ? AND user_id = ? "
                 "ORDER BY upload_date DESC LIMIT 1",
-                (provider, account_number),
+                (provider, account_number, user_id),
             ) as c:
                 existing_row = await c.fetchone()
 
@@ -409,7 +462,7 @@ async def upload_bill(
                     utility_type = ?, amount_eur = ?, consumption_kwh = ?,
                     consumption_m3 = ?, period_start = ?, period_end = ?,
                     account_number = ?, address = ?, raw_json = ?
-                WHERE id = ?
+                WHERE id = ? AND user_id = ?
             """, (
                 file.filename, now,
                 parsed.get("bill_date"),
@@ -424,13 +477,14 @@ async def upload_bill(
                 parsed.get("address"),
                 json.dumps(parsed),
                 replaced_id,
+                user_id,
             ))
         else:
             await db.execute("""
                 INSERT INTO bills (id, filename, upload_date, bill_date, provider, utility_type,
                     amount_eur, consumption_kwh, consumption_m3, period_start, period_end,
-                    account_number, address, raw_json)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    account_number, address, raw_json, user_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 bill_id, file.filename, now,
                 parsed.get("bill_date"),
@@ -444,6 +498,7 @@ async def upload_bill(
                 parsed.get("account_number"),
                 parsed.get("address"),
                 json.dumps(parsed),
+                user_id,
             ))
         await db.commit()
 
@@ -451,21 +506,26 @@ async def upload_bill(
 
 
 @app.get("/api/bills")
-async def list_bills():
-    async with aiosqlite.connect(DB_PATH) as db:
+async def list_bills(user_id: str = Depends(get_user_id)):
+    async with _db() as db:
         db.row_factory = aiosqlite.Row
         async with db.execute(
-            "SELECT * FROM bills ORDER BY bill_date DESC, upload_date DESC"
+            "SELECT * FROM bills WHERE user_id = ? "
+            "ORDER BY bill_date DESC, upload_date DESC",
+            (user_id,),
         ) as cursor:
             rows = await cursor.fetchall()
     return [dict(r) for r in rows]
 
 
 @app.get("/api/bills/{bill_id}")
-async def get_bill(bill_id: str):
-    async with aiosqlite.connect(DB_PATH) as db:
+async def get_bill(bill_id: str, user_id: str = Depends(get_user_id)):
+    async with _db() as db:
         db.row_factory = aiosqlite.Row
-        async with db.execute("SELECT * FROM bills WHERE id = ?", (bill_id,)) as cursor:
+        async with db.execute(
+            "SELECT * FROM bills WHERE id = ? AND user_id = ?",
+            (bill_id, user_id),
+        ) as cursor:
             row = await cursor.fetchone()
     if not row:
         raise HTTPException(404, "Bill not found")
@@ -473,7 +533,11 @@ async def get_bill(bill_id: str):
 
 
 @app.put("/api/bills/{bill_id}")
-async def update_bill(bill_id: str, update: BillUpdate):
+async def update_bill(
+    bill_id: str,
+    update: BillUpdate,
+    user_id: str = Depends(get_user_id),
+):
     # Filter to editable columns only. Even though BillUpdate pins the shape,
     # the explicit allowlist prevents future field additions from silently
     # becoming writable at the HTTP layer.
@@ -484,17 +548,23 @@ async def update_bill(bill_id: str, update: BillUpdate):
     if not fields:
         raise HTTPException(400, "No fields to update")
     set_clause = ", ".join(f"{k} = ?" for k in fields)
-    values = list(fields.values()) + [bill_id]
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute(f"UPDATE bills SET {set_clause} WHERE id = ?", values)
+    values = list(fields.values()) + [bill_id, user_id]
+    async with _db() as db:
+        await db.execute(
+            f"UPDATE bills SET {set_clause} WHERE id = ? AND user_id = ?",
+            values,
+        )
         await db.commit()
     return {"status": "updated"}
 
 
 @app.delete("/api/bills/{bill_id}")
-async def delete_bill(bill_id: str):
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute("DELETE FROM bills WHERE id = ?", (bill_id,))
+async def delete_bill(bill_id: str, user_id: str = Depends(get_user_id)):
+    async with _db() as db:
+        await db.execute(
+            "DELETE FROM bills WHERE id = ? AND user_id = ?",
+            (bill_id, user_id),
+        )
         await db.commit()
     return {"status": "deleted"}
 
@@ -581,8 +651,8 @@ async def _build_openrouter_chain(user_model: str, max_models: int = 4) -> list[
 
 
 @app.get("/api/analytics/summary")
-async def analytics_summary():
-    async with aiosqlite.connect(DB_PATH) as db:
+async def analytics_summary(user_id: str = Depends(get_user_id)):
+    async with _db() as db:
         db.row_factory = aiosqlite.Row
 
         # Fetch every bill so we can split korteriühistu bills into their
@@ -593,8 +663,8 @@ async def analytics_summary():
             SELECT id, utility_type, amount_eur, consumption_kwh, consumption_m3,
                    period_start, bill_date, upload_date, raw_json
             FROM bills
-            WHERE amount_eur IS NOT NULL
-        """) as c:
+            WHERE amount_eur IS NOT NULL AND user_id = ?
+        """, (user_id,)) as c:
             all_bills = [dict(r) for r in await c.fetchall()]
 
         async with db.execute("""
@@ -604,10 +674,10 @@ async def analytics_summary():
                 SUM(amount_eur) as total_eur,
                 AVG(amount_eur) as avg_eur
             FROM bills
-            WHERE amount_eur IS NOT NULL AND provider IS NOT NULL
+            WHERE amount_eur IS NOT NULL AND provider IS NOT NULL AND user_id = ?
             GROUP BY provider
             ORDER BY total_eur DESC
-        """) as c:
+        """, (user_id,)) as c:
             by_provider = [dict(r) for r in await c.fetchall()]
 
         async with db.execute("""
@@ -615,10 +685,10 @@ async def analytics_summary():
                 strftime('%Y-%m', COALESCE(period_start, bill_date, upload_date)) as month,
                 SUM(amount_eur) as total_eur
             FROM bills
-            WHERE amount_eur IS NOT NULL
+            WHERE amount_eur IS NOT NULL AND user_id = ?
             GROUP BY month
             ORDER BY month
-        """) as c:
+        """, (user_id,)) as c:
             monthly_total = [dict(r) for r in await c.fetchall()]
 
     # ────────────────────────────────────────────────────────────────────
@@ -794,10 +864,12 @@ async def analytics_summary():
     _suffix_et = _re_li.compile(r"\s+[Aa]lg[:\s].*$")
 
     line_item_trends: list[dict] = []
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _db() as db:
         db.row_factory = aiosqlite.Row
         async with db.execute(
-            "SELECT period_start, bill_date, upload_date, raw_json FROM bills WHERE raw_json IS NOT NULL"
+            "SELECT period_start, bill_date, upload_date, raw_json FROM bills "
+            "WHERE raw_json IS NOT NULL AND user_id = ?",
+            (user_id,),
         ) as c:
             bill_rows = await c.fetchall()
 

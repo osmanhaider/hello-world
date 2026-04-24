@@ -41,10 +41,10 @@ def _b64url_decode(data: str) -> bytes:
     return base64.urlsafe_b64decode(data + padding)
 
 
-def create_token(ttl_sec: int | None = None) -> str:
+def create_token(user_id: str, ttl_sec: int | None = None) -> str:
     if not AUTH_SECRET:
         raise AuthError("AUTH_SECRET is not configured")
-    payload = {"exp": int(time.time()) + (ttl_sec or TOKEN_TTL_SEC)}
+    payload = {"sub": user_id, "exp": int(time.time()) + (ttl_sec or TOKEN_TTL_SEC)}
     payload_b64 = _b64url_encode(json.dumps(payload, separators=(",", ":")).encode())
     sig = hmac.new(AUTH_SECRET.encode(), payload_b64.encode(), hashlib.sha256).hexdigest()
     return f"{payload_b64}.{sig}"
