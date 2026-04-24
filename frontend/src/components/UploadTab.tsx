@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { api } from "../api";
 import { Upload, CheckCircle, AlertCircle, Loader2, RefreshCw } from "lucide-react";
 
@@ -19,11 +19,13 @@ interface UploadTabProps {
 type Status = "idle" | "uploading" | "success" | "replaced" | "error";
 type ParserMode = "tesseract" | "openrouter";
 
-const FREE_MODELS = [
-  { id: "google/gemini-2.0-flash-exp:free", label: "Gemini 2.0 Flash (best)" },
-  { id: "meta-llama/llama-3.2-90b-vision-instruct:free", label: "Llama 3.2 90B Vision" },
-  { id: "qwen/qwen2-vl-7b-instruct:free", label: "Qwen2-VL 7B" },
-  { id: "microsoft/phi-3-vision-128k-instruct:free", label: "Phi-3 Vision" },
+// Fallback list if the backend can't fetch the live list from OpenRouter.
+// The live list comes from GET /api/openrouter-models and is fetched on
+// mount — OpenRouter changes their free tier often enough that a hardcoded
+// list goes stale within weeks.
+const FALLBACK_MODELS = [
+  { id: "google/gemini-2.0-flash-exp:free", label: "Gemini 2.0 Flash" },
+  { id: "__custom__", label: "Custom model ID…" },
 ];
 
 export default function UploadTab({ onSuccess }: UploadTabProps) {
@@ -32,19 +34,41 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
   const [parsed, setParsed] = useState<Record<string, unknown> | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
   const [parserMode, setParserMode] = useState<ParserMode>("openrouter");
-  const [selectedModel, setSelectedModel] = useState(FREE_MODELS[0].id);
+  const [availableModels, setAvailableModels] = useState(FALLBACK_MODELS);
+  const [selectedModel, setSelectedModel] = useState(FALLBACK_MODELS[0].id);
+  const [customModel, setCustomModel] = useState("");
+  const [modelsLoading, setModelsLoading] = useState(true);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.getOpenRouterModels()
+      .then(res => {
+        if (cancelled) return;
+        const live = res.data.models || [];
+        const withCustom = [...live, { id: "__custom__", label: "Custom model ID…" }];
+        setAvailableModels(withCustom);
+        if (live.length > 0) setSelectedModel(live[0].id);
+      })
+      .catch(() => {
+        // Backend unreachable or failed — fallback list is already in state.
+      })
+      .finally(() => {
+        if (!cancelled) setModelsLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, []);
 
   const handleFile = useCallback(async (file: File) => {
     setStatus("uploading");
     setParsed(null);
     setErrorMsg("");
     try {
-      const res = await api.uploadBill(
-        file,
-        parserMode,
-        parserMode === "openrouter" ? selectedModel : undefined,
-      );
+      const effectiveModel =
+        parserMode === "openrouter"
+          ? (selectedModel === "__custom__" ? customModel.trim() : selectedModel)
+          : undefined;
+      const res = await api.uploadBill(file, parserMode, effectiveModel || undefined);
       setParsed(res.data.parsed);
       setStatus(res.data.replaced ? "replaced" : "success");
       setTimeout(onSuccess, 2000);
@@ -53,7 +77,7 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
       setErrorMsg(msg);
       setStatus("error");
     }
-  }, [onSuccess, parserMode, selectedModel]);
+  }, [onSuccess, parserMode, selectedModel, customModel]);
 
   const onDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -114,10 +138,13 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
 
         {parserMode === "openrouter" && (
           <div>
-            <label style={{ fontSize: 12, color: "#9ca3af", display: "block", marginBottom: 4 }}>Model</label>
+            <label style={{ fontSize: 12, color: "#9ca3af", display: "block", marginBottom: 4 }}>
+              Model {modelsLoading ? "(loading live list…)" : `(${availableModels.length - 1} available)`}
+            </label>
             <select
               value={selectedModel}
               onChange={(e) => setSelectedModel(e.target.value)}
+              disabled={modelsLoading}
               style={{
                 width: "100%",
                 background: "#252838",
@@ -126,13 +153,39 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
                 color: "#e5e7eb",
                 padding: "7px 10px",
                 fontSize: 13,
-                cursor: "pointer",
+                cursor: modelsLoading ? "wait" : "pointer",
+                opacity: modelsLoading ? 0.6 : 1,
               }}
             >
-              {FREE_MODELS.map(m => (
+              {availableModels.map(m => (
                 <option key={m.id} value={m.id}>{m.label}</option>
               ))}
             </select>
+            {selectedModel === "__custom__" && (
+              <input
+                type="text"
+                value={customModel}
+                onChange={(e) => setCustomModel(e.target.value)}
+                placeholder="e.g. mistralai/pixtral-12b:free"
+                style={{
+                  width: "100%",
+                  background: "#252838",
+                  border: "1px solid #374151",
+                  borderRadius: 6,
+                  color: "#e5e7eb",
+                  padding: "7px 10px",
+                  fontSize: 13,
+                  marginTop: 6,
+                  fontFamily: "monospace",
+                }}
+              />
+            )}
+            <div style={{ fontSize: 11, color: "#6b7280", marginTop: 6 }}>
+              Browse all free models at{" "}
+              <a href="https://openrouter.ai/models?max_price=0&input_modalities=image" target="_blank" rel="noreferrer" style={{ color: "#93c5fd" }}>
+                openrouter.ai/models
+              </a>
+            </div>
           </div>
         )}
       </div>
@@ -210,17 +263,49 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
           <AlertCircle size={20} color="#f59e0b" style={{ flexShrink: 0, marginTop: 1 }} />
           <div>
             <div style={{ color: "#f59e0b", fontWeight: 600, fontSize: 14, marginBottom: 4 }}>
-              OCR couldn't read this invoice
+              Couldn't extract data from this invoice
             </div>
+            {typeof parsed.error === "string" ? (
+              <div style={{ color: "#d1d5db", fontSize: 13, lineHeight: 1.5, marginBottom: 8 }}>
+                <code style={{ background: "#252838", padding: "2px 6px", borderRadius: 4, fontSize: 12 }}>
+                  {parsed.error}
+                </code>
+              </div>
+            ) : null}
             <div style={{ color: "#d1d5db", fontSize: 13, lineHeight: 1.5 }}>
-              The local OCR parser found very little data — this usually means the invoice
-              layout or language doesn't match the built-in patterns. Switch to{" "}
-              <strong style={{ color: "#93c5fd" }}>AI (OpenRouter)</strong> above and re-upload
-              for accurate extraction from any invoice format or language.
+              {parserMode === "openrouter" ? (
+                <>
+                  Try a different model from the dropdown — the selected one may have been
+                  delisted from OpenRouter's free tier or hit a rate limit.
+                </>
+              ) : (
+                <>
+                  The local OCR parser found very little data. Switch to{" "}
+                  <strong style={{ color: "#93c5fd" }}>AI (OpenRouter)</strong> above and
+                  re-upload for accurate extraction from any invoice format or language.
+                </>
+              )}
             </div>
           </div>
         </div>
       )}
+
+      {isSuccess && parsed && Array.isArray(parsed._models_tried) && parsed._models_tried.length > 0 && parsed._model_used ? (
+        <div style={{
+          ...cardStyle,
+          marginTop: 16,
+          borderLeft: "3px solid #2563eb",
+          padding: "10px 14px",
+          fontSize: 12,
+        }}>
+          <div style={{ color: "#93c5fd", fontWeight: 600, marginBottom: 4 }}>
+            Auto-fallback used: succeeded with <code>{String(parsed._model_used)}</code>
+          </div>
+          <div style={{ color: "#6b7280" }}>
+            Previous attempts: {(parsed._models_tried as string[]).join(" · ")}
+          </div>
+        </div>
+      ) : null}
 
       {isSuccess && parsed && (
         <>

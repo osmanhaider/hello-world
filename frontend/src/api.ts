@@ -110,4 +110,8 @@ export const api = {
   deleteBill: (id: string) => axios.delete(`${BASE}/api/bills/${id}`),
   updateBill: (id: string, data: Partial<Bill>) => axios.put(`${BASE}/api/bills/${id}`, data),
   getAnalytics: () => axios.get<AnalyticsSummary>(`${BASE}/api/analytics/summary`),
+  getOpenRouterModels: () =>
+    axios.get<{ models: { id: string; label: string }[]; cached?: boolean; error?: string }>(
+      `${BASE}/api/openrouter-models`
+    ),
 };
