@@ -72,6 +72,8 @@ export interface MonthlyTotal {
   month: string;
   total_eur: number;
   rolling_avg_3m: number;
+  mom_delta_eur: number | null;
+  mom_delta_pct: number | null;
   yoy_delta_eur: number | null;
   yoy_delta_pct: number | null;
 }

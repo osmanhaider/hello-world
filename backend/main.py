@@ -334,6 +334,12 @@ async def analytics_summary():
         window = monthly_total[max(0, i-2):i+1]
         row["rolling_avg_3m"] = sum(r["total_eur"] for r in window) / len(window)
 
+    # MoM delta per month
+    for i, row in enumerate(monthly_total):
+        prev = monthly_total[i - 1]["total_eur"] if i > 0 else None
+        row["mom_delta_eur"] = round(row["total_eur"] - prev, 2) if prev is not None else None
+        row["mom_delta_pct"] = round((row["total_eur"] - prev) / prev * 100, 1) if prev else None
+
     # YoY delta per month
     month_map = {r["month"]: r["total_eur"] for r in monthly_total}
     for row in monthly_total:

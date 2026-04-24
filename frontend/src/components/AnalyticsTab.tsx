@@ -28,8 +28,22 @@ function fmtEur(v: unknown): [string, string] {
   return [`€${(v as number).toFixed(2)}`, ""];
 }
 
-function fmtPct(v: unknown): [string, string] {
-  return [`${(v as number).toFixed(1)}%`, "YoY change"];
+
+function PctBadge({ v, label }: { v: number | null; label: string }) {
+  if (v == null) return <span style={{ color: "#4b5563", fontSize: 12 }}>—</span>;
+  const pos = v > 0;
+  const flat = Math.abs(v) < 0.5;
+  return (
+    <span style={{
+      display: "inline-flex", alignItems: "center", gap: 4,
+      color: flat ? "#9ca3af" : pos ? "#ef4444" : "#22c55e",
+      fontSize: 13, fontWeight: 600, fontVariantNumeric: "tabular-nums",
+    }}>
+      {flat ? <Minus size={12} /> : pos ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
+      {pos ? "+" : ""}{v.toFixed(1)}%
+      <span style={{ color: "#6b7280", fontWeight: 400, fontSize: 11 }}>{label}</span>
+    </span>
+  );
 }
 
 function StatCard({ label, value, sub, trend }: { label: string; value: string; sub?: string; trend?: "up" | "down" | "flat" }) {
@@ -95,7 +109,12 @@ export default function AnalyticsTab() {
   const totalSpend = data.by_type.reduce((s, t) => s + t.total_eur, 0);
   const latestMonth = data.monthly_total[data.monthly_total.length - 1];
   const prevMonth = data.monthly_total[data.monthly_total.length - 2];
-  const momChange = prevMonth ? ((latestMonth.total_eur - prevMonth.total_eur) / prevMonth.total_eur * 100) : null;
+  const momChange = latestMonth.mom_delta_pct ?? (prevMonth ? ((latestMonth.total_eur - prevMonth.total_eur) / prevMonth.total_eur * 100) : null);
+  const latestYoy = latestMonth.yoy_delta_pct;
+
+  const momRows = data.monthly_total
+    .filter(r => r.mom_delta_pct != null)
+    .map(r => ({ month: r.month, delta: r.mom_delta_pct!, eur: r.mom_delta_eur!, total: r.total_eur }));
 
   const types = Array.from(new Set(data.by_month.map(r => r.utility_type)));
 
@@ -159,9 +178,17 @@ export default function AnalyticsTab() {
         <StatCard
           label="Latest Month"
           value={`€${latestMonth.total_eur.toFixed(2)}`}
-          sub={momChange != null ? `${momChange > 0 ? "+" : ""}${momChange.toFixed(1)}% vs prev month` : undefined}
+          sub={momChange != null ? `${momChange > 0 ? "+" : ""}${momChange.toFixed(1)}% MoM` : undefined}
           trend={momChange == null ? undefined : momChange > 5 ? "up" : momChange < -5 ? "down" : "flat"}
         />
+        {latestYoy != null && (
+          <StatCard
+            label="YoY Change"
+            value={`${latestYoy > 0 ? "+" : ""}${latestYoy.toFixed(1)}%`}
+            sub={latestMonth.yoy_delta_eur != null ? `€${latestMonth.yoy_delta_eur > 0 ? "+" : ""}${latestMonth.yoy_delta_eur.toFixed(2)} vs same month last year` : "vs same month last year"}
+            trend={latestYoy > 5 ? "up" : latestYoy < -5 ? "down" : "flat"}
+          />
+        )}
         <StatCard label="3-Month Avg" value={`€${latestMonth.rolling_avg_3m.toFixed(2)}`} sub="rolling average" />
         <StatCard label="Highest Single Bill" value={`€${Math.max(...data.by_type.map(t => t.max_eur)).toFixed(2)}`} />
         <StatCard label="Monthly Avg (all time)" value={`€${(totalSpend / Math.max(data.monthly_total.length, 1)).toFixed(2)}`} />
@@ -171,7 +198,7 @@ export default function AnalyticsTab() {
       </div>
 
       {/* 1. Total spend over time */}
-      <SectionTitle>📈 1. Monthly Spending Trend & Rolling Average</SectionTitle>
+      <SectionTitle>📈 1. Monthly Spending Trend &amp; Rolling Average</SectionTitle>
       <ChartCard title="Total Monthly Spend" subtitle="Blue area = actual spend · Dashed = 3-month rolling average">
         <ResponsiveContainer width="100%" height={260}>
           <AreaChart data={data.monthly_total}>
@@ -192,8 +219,96 @@ export default function AnalyticsTab() {
         </ResponsiveContainer>
       </ChartCard>
 
-      {/* 2. Breakdown by type */}
-      <SectionTitle>🗂️ 2. Spend Breakdown by Utility Type</SectionTitle>
+      {/* 2. MoM & YoY % Change */}
+      {(momRows.length > 0 || yoyRows.length > 0) && (
+        <>
+          <SectionTitle>📉 2. Month-over-Month &amp; Year-over-Year % Change</SectionTitle>
+          <div style={grid2}>
+            {momRows.length > 0 && (
+              <ChartCard title="Month-over-Month Change" subtitle="Green = cheaper than previous month · Red = more expensive">
+                <ResponsiveContainer width="100%" height={260}>
+                  <BarChart data={momRows}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#2d3148" />
+                    <XAxis dataKey="month" tick={{ fill: "#6b7280", fontSize: 11 }} />
+                    <YAxis tick={{ fill: "#6b7280", fontSize: 12 }} tickFormatter={v => `${v}%`} />
+                    <Tooltip
+                      {...tooltipStyle}
+                      formatter={(v, name) => name === "delta"
+                        ? [`${(v as number) > 0 ? "+" : ""}${(v as number).toFixed(1)}%`, "MoM %"]
+                        : [`€${(v as number) > 0 ? "+" : ""}${(v as number).toFixed(2)}`, "MoM €"]}
+                    />
+                    <Bar dataKey="delta" name="MoM %" radius={[3, 3, 0, 0]}>
+                      {momRows.map((r, i) => (
+                        <Cell key={i} fill={r.delta > 0 ? "#ef4444" : "#22c55e"} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </ChartCard>
+            )}
+
+            {yoyRows.length > 0 && (
+              <ChartCard title="Year-over-Year Change" subtitle="Green = cheaper than same month last year · Red = more expensive">
+                <ResponsiveContainer width="100%" height={260}>
+                  <BarChart data={yoyRows}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#2d3148" />
+                    <XAxis dataKey="month" tick={{ fill: "#6b7280", fontSize: 11 }} />
+                    <YAxis tick={{ fill: "#6b7280", fontSize: 12 }} tickFormatter={v => `${v}%`} />
+                    <Tooltip
+                      {...tooltipStyle}
+                      formatter={(v, name) => name === "delta"
+                        ? [`${(v as number) > 0 ? "+" : ""}${(v as number).toFixed(1)}%`, "YoY %"]
+                        : [`€${(v as number) > 0 ? "+" : ""}${(v as number).toFixed(2)}`, "YoY €"]}
+                    />
+                    <Bar dataKey="delta" name="YoY %" radius={[3, 3, 0, 0]}>
+                      {yoyRows.map((r, i) => (
+                        <Cell key={i} fill={r.delta > 0 ? "#ef4444" : "#22c55e"} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </ChartCard>
+            )}
+          </div>
+
+          {/* Change table */}
+          <div style={{ background: "#1a1d27", border: "1px solid #2d3148", borderRadius: 12, overflow: "hidden", marginTop: 20 }}>
+            <div style={{ padding: "14px 20px", borderBottom: "1px solid #2d3148", fontSize: 14, fontWeight: 600, color: "#e5e7eb" }}>
+              Change Metrics — All Months
+            </div>
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                <thead>
+                  <tr style={{ borderBottom: "1px solid #2d3148" }}>
+                    {["Month", "Total (€)", "MoM Change", "MoM (€)", "YoY Change", "YoY (€)"].map(h => (
+                      <th key={h} style={{ padding: "10px 16px", textAlign: "left", color: "#6b7280", fontWeight: 600, fontSize: 11, textTransform: "uppercase", whiteSpace: "nowrap" }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...data.monthly_total].reverse().map((row, i) => (
+                    <tr key={row.month} style={{ borderBottom: i < data.monthly_total.length - 1 ? "1px solid #1e2132" : "none" }}>
+                      <td style={{ padding: "10px 16px", color: "#e5e7eb", fontWeight: 500 }}>{row.month}</td>
+                      <td style={{ padding: "10px 16px", color: "#22c55e", fontVariantNumeric: "tabular-nums" }}>€{row.total_eur.toFixed(2)}</td>
+                      <td style={{ padding: "10px 16px" }}><PctBadge v={row.mom_delta_pct} label="MoM" /></td>
+                      <td style={{ padding: "10px 16px", color: row.mom_delta_eur == null ? "#4b5563" : row.mom_delta_eur > 0 ? "#ef4444" : "#22c55e", fontVariantNumeric: "tabular-nums", fontSize: 13 }}>
+                        {row.mom_delta_eur != null ? `${row.mom_delta_eur > 0 ? "+" : ""}€${row.mom_delta_eur.toFixed(2)}` : "—"}
+                      </td>
+                      <td style={{ padding: "10px 16px" }}><PctBadge v={row.yoy_delta_pct} label="YoY" /></td>
+                      <td style={{ padding: "10px 16px", color: row.yoy_delta_eur == null ? "#4b5563" : row.yoy_delta_eur > 0 ? "#ef4444" : "#22c55e", fontVariantNumeric: "tabular-nums", fontSize: 13 }}>
+                        {row.yoy_delta_eur != null ? `${row.yoy_delta_eur > 0 ? "+" : ""}€${row.yoy_delta_eur.toFixed(2)}` : "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* 3. Breakdown by type */}
+      <SectionTitle>🗂️ 3. Spend Breakdown by Utility Type</SectionTitle>
       <div style={grid2}>
         <ChartCard title="Monthly Stacked by Type" subtitle="See which utilities drive costs each month">
           <ResponsiveContainer width="100%" height={260}>
@@ -234,8 +349,8 @@ export default function AnalyticsTab() {
         </ChartCard>
       </div>
 
-      {/* 3. Seasonal patterns */}
-      <SectionTitle>🌡️ 3. Seasonal Cost Patterns</SectionTitle>
+      {/* 4. Seasonal patterns */}
+      <SectionTitle>🌡️ 4. Seasonal Cost Patterns</SectionTitle>
       <div style={grid2}>
         <ChartCard title="Average Bill by Calendar Month" subtitle="Reveals heating spikes in winter, A/C in summer">
           <ResponsiveContainer width="100%" height={260}>
@@ -267,52 +382,31 @@ export default function AnalyticsTab() {
         </ChartCard>
       </div>
 
-      {/* 4. Year-over-year */}
-      {(annualRows.length > 1 || yoyRows.length > 0) && (
+      {/* 5. Year-over-year annual view */}
+      {annualRows.length > 1 && (
         <>
-          <SectionTitle>📅 4. Year-over-Year Comparison</SectionTitle>
-          <div style={grid2}>
-            {annualRows.length > 1 && (
-              <ChartCard title="Annual Spend by Category" subtitle="Compare total utility cost across years">
-                <ResponsiveContainer width="100%" height={260}>
-                  <BarChart data={annualRows}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#2d3148" />
-                    <XAxis dataKey="year" tick={{ fill: "#6b7280", fontSize: 12 }} />
-                    <YAxis tick={{ fill: "#6b7280", fontSize: 12 }} tickFormatter={v => `€${v}`} />
-                    <Tooltip {...tooltipStyle} formatter={fmtEur} />
-                    <Legend />
-                    {types.map((t, i) => (
-                      <Bar key={t} dataKey={t} fill={colorFor(t, i)} name={t} />
-                    ))}
-                  </BarChart>
-                </ResponsiveContainer>
-              </ChartCard>
-            )}
-            {yoyRows.length > 0 && (
-              <ChartCard title="YoY Monthly Change (%)" subtitle="Green = saved vs same month last year">
-                <ResponsiveContainer width="100%" height={260}>
-                  <BarChart data={yoyRows}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#2d3148" />
-                    <XAxis dataKey="month" tick={{ fill: "#6b7280", fontSize: 11 }} />
-                    <YAxis tick={{ fill: "#6b7280", fontSize: 12 }} tickFormatter={v => `${v}%`} />
-                    <Tooltip {...tooltipStyle} formatter={fmtPct} />
-                    <Bar dataKey="delta" name="YoY %">
-                      {yoyRows.map((r, i) => (
-                        <Cell key={i} fill={r.delta > 0 ? "#ef4444" : "#22c55e"} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </ChartCard>
-            )}
-          </div>
+          <SectionTitle>📅 5. Annual Spend Comparison</SectionTitle>
+          <ChartCard title="Annual Spend by Category" subtitle="Compare total utility cost across years">
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart data={annualRows}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#2d3148" />
+                <XAxis dataKey="year" tick={{ fill: "#6b7280", fontSize: 12 }} />
+                <YAxis tick={{ fill: "#6b7280", fontSize: 12 }} tickFormatter={v => `€${v}`} />
+                <Tooltip {...tooltipStyle} formatter={fmtEur} />
+                <Legend />
+                {types.map((t, i) => (
+                  <Bar key={t} dataKey={t} fill={colorFor(t, i)} name={t} />
+                ))}
+              </BarChart>
+            </ResponsiveContainer>
+          </ChartCard>
         </>
       )}
 
-      {/* 5. Provider breakdown */}
+      {/* 6. Provider breakdown */}
       {topProviders.length > 0 && (
         <>
-          <SectionTitle>🏢 5. Spend by Provider</SectionTitle>
+          <SectionTitle>🏢 6. Spend by Provider</SectionTitle>
           <ChartCard title="Top Providers by Total Spend" subtitle="Identify your most expensive suppliers">
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={topProviders} layout="vertical">
@@ -329,8 +423,8 @@ export default function AnalyticsTab() {
         </>
       )}
 
-      {/* 6. Per-type trend lines */}
-      <SectionTitle>📊 6. Per-Utility Trend Lines</SectionTitle>
+      {/* 7. Per-type trend lines */}
+      <SectionTitle>📊 7. Per-Utility Trend Lines</SectionTitle>
       <ChartCard title="Each Utility Type Over Time" subtitle="A sudden spike = price change or leak">
         <ResponsiveContainer width="100%" height={300}>
           <LineChart data={stackedRows}>
@@ -346,8 +440,8 @@ export default function AnalyticsTab() {
         </ResponsiveContainer>
       </ChartCard>
 
-      {/* 7. Summary stats table */}
-      <SectionTitle>🔢 7. Summary Statistics by Type</SectionTitle>
+      {/* 8. Summary stats table */}
+      <SectionTitle>🔢 8. Summary Statistics by Type</SectionTitle>
       <div style={{ background: "#1a1d27", border: "1px solid #2d3148", borderRadius: 12, overflow: "hidden" }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
           <thead>
