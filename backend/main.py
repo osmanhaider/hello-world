@@ -185,21 +185,30 @@ async def upload_bill(file: UploadFile = File(...)):
     replaced_id: Optional[str] = None
 
     async with aiosqlite.connect(DB_PATH) as db:
-        # Look for an existing bill matching the same provider + service period
-        # (or same invoice number if period isn't available).
+        # 1st priority: same filename → same physical file uploaded again
         existing_row = None
-        if provider and period_start:
+        async with db.execute(
+            "SELECT id, filename FROM bills WHERE filename = ? "
+            "ORDER BY upload_date DESC LIMIT 1",
+            (file.filename,),
+        ) as c:
+            existing_row = await c.fetchone()
+
+        # 2nd priority: same provider (case-insensitive) + same billing period
+        if not existing_row and provider and period_start:
             async with db.execute(
                 "SELECT id, filename FROM bills "
-                "WHERE provider = ? AND period_start = ? "
+                "WHERE LOWER(TRIM(provider)) = LOWER(TRIM(?)) AND period_start = ? "
                 "ORDER BY upload_date DESC LIMIT 1",
                 (provider, period_start),
             ) as c:
                 existing_row = await c.fetchone()
-        elif provider and account_number:
+
+        # 3rd priority: same provider (case-insensitive) + same account number
+        if not existing_row and provider and account_number:
             async with db.execute(
                 "SELECT id, filename FROM bills "
-                "WHERE provider = ? AND account_number = ? "
+                "WHERE LOWER(TRIM(provider)) = LOWER(TRIM(?)) AND account_number = ? "
                 "ORDER BY upload_date DESC LIMIT 1",
                 (provider, account_number),
             ) as c:
@@ -219,7 +228,7 @@ async def upload_bill(file: UploadFile = File(...)):
                             os.remove(old_path)
                         except OSError:
                             pass
-            # Also rename the newly uploaded file to use the original id so paths stay stable
+            # Rename the newly uploaded file to use the original id so paths stay stable
             new_path = os.path.join(UPLOADS_DIR, f"{replaced_id}.{ext}")
             if new_path != save_path:
                 try:
