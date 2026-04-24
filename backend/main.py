@@ -268,7 +268,7 @@ async def analytics_summary():
 
         async with db.execute("""
             SELECT
-                strftime('%Y-%m', COALESCE(bill_date, upload_date)) as month,
+                strftime('%Y-%m', COALESCE(period_start, bill_date, upload_date)) as month,
                 utility_type,
                 SUM(amount_eur) as total_eur,
                 COUNT(*) as bill_count
@@ -281,7 +281,7 @@ async def analytics_summary():
 
         async with db.execute("""
             SELECT
-                strftime('%Y', COALESCE(bill_date, upload_date)) as year,
+                strftime('%Y', COALESCE(period_start, bill_date, upload_date)) as year,
                 utility_type,
                 SUM(amount_eur) as total_eur,
                 AVG(amount_eur) as avg_monthly_eur,
@@ -295,7 +295,7 @@ async def analytics_summary():
 
         async with db.execute("""
             SELECT
-                strftime('%m', COALESCE(bill_date, upload_date)) as month_num,
+                strftime('%m', COALESCE(period_start, bill_date, upload_date)) as month_num,
                 AVG(amount_eur) as avg_eur,
                 utility_type
             FROM bills
@@ -320,7 +320,7 @@ async def analytics_summary():
 
         async with db.execute("""
             SELECT
-                strftime('%Y-%m', COALESCE(bill_date, upload_date)) as month,
+                strftime('%Y-%m', COALESCE(period_start, bill_date, upload_date)) as month,
                 SUM(amount_eur) as total_eur
             FROM bills
             WHERE amount_eur IS NOT NULL
@@ -358,12 +358,12 @@ async def analytics_summary():
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute(
-            "SELECT bill_date, upload_date, raw_json FROM bills WHERE raw_json IS NOT NULL"
+            "SELECT period_start, bill_date, upload_date, raw_json FROM bills WHERE raw_json IS NOT NULL"
         ) as c:
             bill_rows = await c.fetchall()
 
     for row in bill_rows:
-        date_str = row["bill_date"] or row["upload_date"]
+        date_str = row["period_start"] or row["bill_date"] or row["upload_date"]
         if not date_str:
             continue
         month = date_str[:7]
