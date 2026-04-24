@@ -1,18 +1,79 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import UploadTab from "./components/UploadTab";
 import BillsTab from "./components/BillsTab";
 import AnalyticsTab from "./components/AnalyticsTab";
 import HelpTab from "./components/HelpTab";
+import LoginScreen from "./components/LoginScreen";
 import ErrorBoundary from "./components/ErrorBoundary";
-import { BarChart2, Receipt, Upload, HelpCircle } from "lucide-react";
+import { BarChart2, Receipt, Upload, HelpCircle, LogOut } from "lucide-react";
+import { api } from "./api";
+import { clearToken, getToken } from "./auth";
 
 type Tab = "upload" | "bills" | "analytics" | "help";
+type AuthState = "loading" | "required" | "authed" | "disabled";
 
 export default function App() {
   const [tab, setTab] = useState<Tab>("upload");
   const [refreshKey, setRefreshKey] = useState(0);
+  const [authState, setAuthState] = useState<AuthState>("loading");
 
   const refresh = () => setRefreshKey((k) => k + 1);
+
+  // On mount, ask the backend whether auth is required. If it isn't we
+  // skip the login screen entirely (local-dev convenience). If it is
+  // and we already have a stored token, trust it — the axios interceptor
+  // will bounce us back to login on 401 if the token has expired.
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .getAuthStatus()
+      .then((res) => {
+        if (cancelled) return;
+        if (!res.data.auth_required) {
+          setAuthState("disabled");
+        } else if (getToken()) {
+          setAuthState("authed");
+        } else {
+          setAuthState("required");
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setAuthState(getToken() ? "authed" : "required");
+      });
+    const onLogout = () => setAuthState("required");
+    window.addEventListener("auth:logout", onLogout);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("auth:logout", onLogout);
+    };
+  }, []);
+
+  const logout = () => {
+    clearToken();
+    setAuthState("required");
+  };
+
+  if (authState === "loading") {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          background: "#0f1117",
+          color: "#9ca3af",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontFamily: "system-ui, sans-serif",
+        }}
+      >
+        Loading…
+      </div>
+    );
+  }
+
+  if (authState === "required") {
+    return <LoginScreen onSuccess={() => setAuthState("authed")} />;
+  }
 
   return (
     <div style={{ minHeight: "100vh", background: "#0f1117", color: "#e5e7eb", fontFamily: "system-ui, sans-serif" }}>
@@ -26,7 +87,7 @@ export default function App() {
             <div style={{ fontSize: 12, color: "#9ca3af" }}>Estonia Monthly Bill Analytics</div>
           </div>
         </div>
-        <nav style={{ marginLeft: "auto", display: "flex", gap: 4 }}>
+        <nav style={{ marginLeft: "auto", display: "flex", gap: 4, alignItems: "center" }}>
           {([
             ["upload", "Upload", Upload],
             ["bills", "Bills", Receipt],
@@ -48,6 +109,20 @@ export default function App() {
               {label}
             </button>
           ))}
+          {authState === "authed" && (
+            <button
+              onClick={logout}
+              title="Sign out"
+              style={{
+                display: "flex", alignItems: "center", gap: 8, padding: "8px 12px",
+                borderRadius: 8, border: "1px solid #2d3148", cursor: "pointer", fontSize: 13,
+                background: "transparent", color: "#9ca3af", marginLeft: 8,
+              }}
+            >
+              <LogOut size={14} />
+              Sign out
+            </button>
+          )}
         </nav>
       </header>
 

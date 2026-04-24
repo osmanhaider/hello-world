@@ -9,10 +9,12 @@ from datetime import datetime, timezone
 
 import aiosqlite
 import httpx
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+import auth as auth_mod
 from parser import parse_bill as parse_bill_tesseract
 from parser_openrouter import parse_bill_with_openrouter_chain
 from translation import classify_line_item, enrich_parsed
@@ -99,6 +101,65 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# Paths that bypass the bearer-token check even when auth is active.
+# `/api/auth/login` must be reachable so users can obtain a token;
+# `/api/auth/status` lets the frontend detect whether auth is enabled
+# at all before showing a login screen.
+_AUTH_EXEMPT_PATHS = frozenset({
+    "/api/auth/login",
+    "/api/auth/status",
+})
+
+
+@app.middleware("http")
+async def auth_middleware(request: Request, call_next):
+    # CORS preflights must pass through untouched — the browser strips
+    # custom headers (including Authorization) before sending them.
+    if request.method == "OPTIONS":
+        return await call_next(request)
+    if not auth_mod.auth_enabled():
+        return await call_next(request)
+    path = request.url.path
+    if not path.startswith("/api/") or path in _AUTH_EXEMPT_PATHS:
+        return await call_next(request)
+    header = request.headers.get("authorization", "")
+    if not header.lower().startswith("bearer "):
+        return JSONResponse({"detail": "Missing bearer token"}, status_code=401)
+    try:
+        auth_mod.verify_token(header[7:].strip())
+    except auth_mod.AuthError as e:
+        return JSONResponse({"detail": f"Invalid token: {e}"}, status_code=401)
+    return await call_next(request)
+
+
+if auth_mod.auth_enabled() and not auth_mod.AUTH_SECRET:
+    raise RuntimeError(
+        "APP_PASSWORD is set but AUTH_SECRET is missing. "
+        "Generate one with `python -c 'import secrets; print(secrets.token_hex(32))'` "
+        "and set it as AUTH_SECRET."
+    )
+
+
+class LoginRequest(BaseModel):
+    password: str
+
+
+@app.get("/api/auth/status")
+async def auth_status():
+    """Lets the frontend know if a login screen is needed."""
+    return {"auth_required": auth_mod.auth_enabled()}
+
+
+@app.post("/api/auth/login")
+async def auth_login(body: LoginRequest):
+    if not auth_mod.auth_enabled():
+        # Return a token anyway so the frontend behaves consistently.
+        return {"token": "disabled", "auth_required": False}
+    if not auth_mod.verify_password(body.password):
+        raise HTTPException(401, "Invalid password")
+    return {"token": auth_mod.create_token(), "auth_required": True}
 
 
 class BillUpdate(BaseModel):
