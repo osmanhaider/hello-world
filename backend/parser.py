@@ -376,6 +376,16 @@ def parse_bill(path: str) -> dict:
     line_items = extract_line_items(boxes)
 
     kwh, m3 = totals_from_line_items(line_items)
+
+    # Flag poor extraction: no line items and fewer than 3 useful header fields.
+    # This typically means the invoice layout doesn't match the Estonian-specific
+    # regex patterns, and the user should switch to Claude for better results.
+    meaningful_fields = sum(
+        1 for k, v in header.items()
+        if v is not None and v != "" and k not in ("_source",)
+    )
+    _low_quality = len(line_items) == 0 and meaningful_fields < 3
+
     return {
         **header,
         "utility_type": classify(header.get("provider", ""), line_items),
@@ -384,4 +394,5 @@ def parse_bill(path: str) -> dict:
         "consumption_m3": m3,
         "confidence": confidence,
         "_source": source,
+        "_low_quality": _low_quality,
     }

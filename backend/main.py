@@ -86,38 +86,41 @@ def parse_bill_with_claude(file_path: str) -> dict:
     client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
     data, media_type = encode_image(file_path)
 
-    prompt = """You are an expert at reading Estonian utility bills (electricity, gas, water, heating, internet, etc.).
+    prompt = """You are an expert at reading invoices and bills of any type — utilities \
+(electricity, gas, water, heating, internet, waste), subscriptions, services, rent, \
+housing association fees, or any other kind.
 
-Extract structured data from this bill image. Return ONLY a valid JSON object:
+Extract structured data from this invoice. Return ONLY a valid JSON object:
 {
-  "provider": "company name (e.g. Eesti Energia, Elektrilevi, Tallinna Vesi, Gasum, Telia)",
-  "utility_type": "one of: electricity, gas, water, heating, internet, waste, other",
-  "amount_eur": numeric total amount due in euros (e.g. 45.23),
-  "consumption_kwh": numeric kWh if electricity/heating bill (null otherwise),
-  "consumption_m3": numeric m3 if gas/water bill (null otherwise),
+  "provider": "issuing company or supplier name",
+  "utility_type": "best-fit category — one of: electricity, gas, water, heating, internet, waste, other",
+  "amount_eur": numeric total amount due (use the invoice currency; convert symbol to number if needed),
+  "consumption_kwh": numeric kWh consumed if applicable (null otherwise),
+  "consumption_m3": numeric m³ consumed if applicable (null otherwise),
   "bill_date": "YYYY-MM-DD invoice date",
-  "period_start": "YYYY-MM-DD billing period start",
-  "period_end": "YYYY-MM-DD billing period end",
-  "account_number": "customer or account number",
-  "address": "service address",
-  "period": "raw period text as shown on the bill (e.g. 'Veebruar 2026', 'Märts 2026') — do NOT translate",
-  "vat_amount": numeric VAT in euros,
-  "amount_without_vat": numeric amount excluding VAT,
-  "meter_reading_start": numeric opening meter reading,
-  "meter_reading_end": numeric closing meter reading,
+  "period_start": "YYYY-MM-DD billing period start (null if not shown)",
+  "period_end": "YYYY-MM-DD billing period end (null if not shown)",
+  "account_number": "customer / account / contract number",
+  "address": "service or billing address",
+  "period": "raw period text exactly as printed on the invoice — do NOT translate",
+  "vat_amount": numeric VAT/tax amount,
+  "amount_without_vat": numeric subtotal before VAT/tax,
+  "meter_reading_start": numeric opening meter reading if shown,
+  "meter_reading_end": numeric closing meter reading if shown,
   "due_date": "YYYY-MM-DD payment due date",
   "line_items": [
     {
-      "description_et": "Estonian line item text exactly as printed (e.g. 'Elektrienergia', 'Võrgutasu', 'Aktsiis')",
-      "amount_eur": numeric amount for this line,
+      "description_et": "line item description exactly as printed on the invoice",
+      "description_en": "English translation or plain-English rephrasing of the description",
+      "amount_eur": numeric line amount,
       "quantity": numeric quantity,
-      "unit": "kWh / m3 / pcs / etc."
+      "unit": "unit of measure (kWh, m³, pcs, months, etc.)"
     }
   ],
   "confidence": "high/medium/low"
 }
 
-List every charge line visible. Use null for any field you cannot read. Return only the JSON."""
+List every charge line visible. Use null for any field you cannot determine. Return only the JSON."""
 
     if media_type == "application/pdf":
         message = client.messages.create(
