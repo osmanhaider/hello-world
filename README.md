@@ -47,8 +47,8 @@ node --version
 ### 1. Clone the repo
 
 ```bash
-git clone https://github.com/osmanhaider/hello-world.git
-cd hello-world
+git clone https://github.com/osmanhaider/ee-utility-trackly.git
+cd ee-utility-trackly
 ```
 
 ### 2. Install system dependencies
