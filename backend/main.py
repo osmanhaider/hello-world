@@ -341,11 +341,52 @@ async def analytics_summary():
         row["yoy_delta_eur"] = round(row["total_eur"] - prev, 2) if prev else None
         row["yoy_delta_pct"] = round((row["total_eur"] - prev) / prev * 100, 1) if prev else None
 
+    # Line-item level trends — extracted from raw_json of every bill
+    line_item_trends: list[dict] = []
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT bill_date, upload_date, raw_json FROM bills WHERE raw_json IS NOT NULL"
+        ) as c:
+            bill_rows = await c.fetchall()
+
+    for row in bill_rows:
+        date_str = row["bill_date"] or row["upload_date"]
+        if not date_str:
+            continue
+        month = date_str[:7]
+        try:
+            data = json.loads(row["raw_json"])
+        except (json.JSONDecodeError, TypeError):
+            continue
+        for item in data.get("line_items") or []:
+            en = (item.get("description_en") or "").strip()
+            et = (item.get("description_et") or "").strip()
+            amount = item.get("amount_eur")
+            qty = item.get("quantity")
+            unit = (item.get("unit") or "").lower()
+            if not en or amount is None:
+                continue
+            unit_price = round(amount / qty, 4) if qty and qty != 0 else None
+            line_item_trends.append({
+                "month": month,
+                "description_en": en,
+                "description_et": et,
+                "amount_eur": round(amount, 2),
+                "quantity": qty,
+                "unit": unit,
+                "unit_price": unit_price,
+            })
+
+    # Sort so frontend always gets chronological order
+    line_item_trends.sort(key=lambda r: (r["month"], r["description_en"]))
+
     return {
         "by_type": by_type,
         "by_month": by_month,
         "by_year": by_year,
         "seasonal": seasonal,
         "by_provider": by_provider,
-        "monthly_total": monthly_total
+        "monthly_total": monthly_total,
+        "line_item_trends": line_item_trends,
     }

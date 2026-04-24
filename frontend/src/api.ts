@@ -27,6 +27,17 @@ export interface AnalyticsSummary {
   seasonal: SeasonalStat[];
   by_provider: ProviderStat[];
   monthly_total: MonthlyTotal[];
+  line_item_trends: LineItemTrend[];
+}
+
+export interface LineItemTrend {
+  month: string;
+  description_en: string;
+  description_et: string;
+  amount_eur: number;
+  quantity: number | null;
+  unit: string;
+  unit_price: number | null;
 }
 
 export interface TypeStat {

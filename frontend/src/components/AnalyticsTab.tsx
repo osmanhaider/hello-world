@@ -159,6 +159,65 @@ export default function AnalyticsTab() {
   }
   const annualRows = Object.values(annualByType).sort((a, b) => String(a.year).localeCompare(String(b.year)));
 
+  // ── Line-item analytics ─────────────────────────────────────────────────
+  const lit = data.line_item_trends ?? [];
+  const liMonths = Array.from(new Set(lit.map(r => r.month))).sort();
+  const liLabels = Array.from(new Set(lit.map(r => r.description_en))).sort();
+
+  // Unit-price trend per line item across months
+  const unitPriceByLabel: Record<string, Record<string, number | string>> = {};
+  for (const r of lit) {
+    if (r.unit_price == null) continue;
+    if (!unitPriceByLabel[r.month]) unitPriceByLabel[r.month] = { month: r.month };
+    unitPriceByLabel[r.month][r.description_en] = parseFloat(r.unit_price.toFixed(4));
+  }
+  const unitPriceRows = Object.values(unitPriceByLabel).sort((a, b) => String(a.month).localeCompare(String(b.month)));
+
+  // Line-item cost per month (for comparison bar chart)
+  const liCostByMonth: Record<string, Record<string, number | string>> = {};
+  for (const r of lit) {
+    if (!liCostByMonth[r.month]) liCostByMonth[r.month] = { month: r.month };
+    const cur = (liCostByMonth[r.month][r.description_en] as number) ?? 0;
+    liCostByMonth[r.month][r.description_en] = parseFloat((cur + r.amount_eur).toFixed(2));
+  }
+  const liCostRows = Object.values(liCostByMonth).sort((a, b) => String(a.month).localeCompare(String(b.month)));
+
+  // Price vs Consumption decomposition for metered items (have a unit_price and quantity)
+  // For each consecutive month pair, compute: price effect + volume effect
+  const meteredLabels = Array.from(new Set(
+    lit.filter(r => r.unit_price != null && r.quantity != null && r.quantity > 0).map(r => r.description_en)
+  ));
+  const decompRows: { label: string; month: string; priceEffect: number; volEffect: number; total: number }[] = [];
+  for (const label of meteredLabels) {
+    const series = lit.filter(r => r.description_en === label && r.unit_price != null && r.quantity != null)
+                      .sort((a, b) => a.month.localeCompare(b.month));
+    for (let i = 1; i < series.length; i++) {
+      const prev = series[i - 1], cur = series[i];
+      if (!prev.unit_price || !cur.unit_price || !prev.quantity || !cur.quantity) continue;
+      const priceEff = parseFloat(((cur.unit_price - prev.unit_price) * prev.quantity).toFixed(2));
+      const volEff   = parseFloat(((cur.quantity  - prev.quantity)  * prev.unit_price).toFixed(2));
+      decompRows.push({ label, month: cur.month, priceEffect: priceEff, volEffect: volEff, total: parseFloat((cur.amount_eur - prev.amount_eur).toFixed(2)) });
+    }
+  }
+
+  // Month-vs-month comparison table: last two months side by side
+  const [prevMonthLabel, latestMonthLabel] = liMonths.slice(-2);
+  const comparisonItems = liLabels.map(label => {
+    const prev = lit.find(r => r.month === prevMonthLabel && r.description_en === label);
+    const curr = lit.find(r => r.month === latestMonthLabel && r.description_en === label);
+    if (!prev && !curr) return null;
+    const amtDiff = (curr?.amount_eur ?? 0) - (prev?.amount_eur ?? 0);
+    const priceDiff = curr?.unit_price != null && prev?.unit_price != null ? curr.unit_price - prev.unit_price : null;
+    return { label, prev, curr, amtDiff, priceDiff };
+  }).filter(Boolean) as { label: string; prev: typeof lit[0] | undefined; curr: typeof lit[0] | undefined; amtDiff: number; priceDiff: number | null }[];
+
+  // Pick the line items whose unit prices actually vary across months (most interesting to chart)
+  const priceVaryingLabels = liLabels.filter(label => {
+    const prices = lit.filter(r => r.description_en === label && r.unit_price != null).map(r => r.unit_price!);
+    if (prices.length < 2) return false;
+    return Math.max(...prices) - Math.min(...prices) > 0.001;
+  });
+
   const grid2 = { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))", gap: 20 };
 
   return (
@@ -473,6 +532,180 @@ export default function AnalyticsTab() {
           </tbody>
         </table>
       </div>
+
+      {/* 9. Line-item unit price trends */}
+      {priceVaryingLabels.length > 0 && (
+        <>
+          <SectionTitle>💶 9. Unit Price Trends (€ per unit)</SectionTitle>
+          <ChartCard
+            title="Price per Unit Over Time"
+            subtitle="Tracks €/kWh, €/m², €/m³ changes across months — reveals tariff hikes independent of consumption"
+          >
+            <ResponsiveContainer width="100%" height={300}>
+              <LineChart data={unitPriceRows}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#2d3148" />
+                <XAxis dataKey="month" tick={{ fill: "#6b7280", fontSize: 11 }} />
+                <YAxis tick={{ fill: "#6b7280", fontSize: 12 }} tickFormatter={v => `€${v}`} />
+                <Tooltip
+                  {...tooltipStyle}
+                  formatter={(v: unknown) => [`€${(v as number).toFixed(4)}/unit`, "unit price"]}
+                />
+                <Legend />
+                {priceVaryingLabels.map((label, i) => (
+                  <Line key={label} type="monotone" dataKey={label} stroke={PALETTE[i % PALETTE.length]}
+                    name={label} strokeWidth={2} dot={{ r: 4 }} connectNulls />
+                ))}
+              </LineChart>
+            </ResponsiveContainer>
+          </ChartCard>
+        </>
+      )}
+
+      {/* 10. Line-item cost comparison across months */}
+      {liCostRows.length > 1 && liLabels.length > 0 && (
+        <>
+          <SectionTitle>🧾 10. Line-Item Cost Comparison Across Months</SectionTitle>
+          <ChartCard
+            title="Every Line Item by Month"
+            subtitle="See which individual charge drove the bill up or down each month"
+          >
+            <div style={{ overflowX: "auto" }}>
+              <ResponsiveContainer width={Math.max(600, liCostRows.length * 120)} height={320}>
+                <BarChart data={liCostRows}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#2d3148" />
+                  <XAxis dataKey="month" tick={{ fill: "#6b7280", fontSize: 11 }} />
+                  <YAxis tick={{ fill: "#6b7280", fontSize: 12 }} tickFormatter={v => `€${v}`} />
+                  <Tooltip {...tooltipStyle} formatter={fmtEur} />
+                  <Legend wrapperStyle={{ fontSize: 12 }} />
+                  {liLabels.map((label, i) => (
+                    <Bar key={label} dataKey={label} stackId="a" fill={PALETTE[i % PALETTE.length]} name={label} />
+                  ))}
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </ChartCard>
+        </>
+      )}
+
+      {/* 11. Price vs Consumption decomposition */}
+      {decompRows.length > 0 && (
+        <>
+          <SectionTitle>⚖️ 11. Price vs Consumption Decomposition</SectionTitle>
+          <ChartCard
+            title="What drove the cost change? Price or usage?"
+            subtitle="Red = price increase effect · Blue = consumption increase effect · Values can be negative (savings)"
+          >
+            <div style={{ overflowX: "auto" }}>
+              <ResponsiveContainer width={Math.max(600, decompRows.length * 80)} height={300}>
+                <BarChart data={decompRows}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#2d3148" />
+                  <XAxis dataKey="label" tick={{ fill: "#6b7280", fontSize: 11 }} interval={0} angle={-20} textAnchor="end" height={56} />
+                  <YAxis tick={{ fill: "#6b7280", fontSize: 12 }} tickFormatter={v => `€${v}`} />
+                  <Tooltip
+                    {...tooltipStyle}
+                    formatter={(v: unknown, name: unknown) => [`${(v as number) >= 0 ? "+" : ""}€${(v as number).toFixed(2)}`, name as string]}
+                  />
+                  <Legend />
+                  <Bar dataKey="priceEffect" name="Price effect (€)" fill="#ef4444" radius={[3, 3, 0, 0]} />
+                  <Bar dataKey="volEffect" name="Volume effect (€)" fill="#2563eb" radius={[3, 3, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </ChartCard>
+
+          <div style={{ background: "#1a1d27", border: "1px solid #2d3148", borderRadius: 12, overflow: "hidden", marginTop: 20 }}>
+            <div style={{ padding: "14px 20px", borderBottom: "1px solid #2d3148", fontSize: 14, fontWeight: 600, color: "#e5e7eb" }}>
+              Decomposition Table — All Months
+            </div>
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                <thead>
+                  <tr style={{ borderBottom: "1px solid #2d3148" }}>
+                    {["Line Item", "Month", "Price Effect", "Volume Effect", "Total Change", "Interpretation"].map(h => (
+                      <th key={h} style={{ padding: "10px 16px", textAlign: "left", color: "#6b7280", fontWeight: 600, fontSize: 11, textTransform: "uppercase", whiteSpace: "nowrap" }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {decompRows.map((r, i) => {
+                    const priceUp = r.priceEffect > 0.005;
+                    const volUp = r.volEffect > 0.005;
+                    const interpretation =
+                      Math.abs(r.priceEffect) < 0.01 && Math.abs(r.volEffect) < 0.01 ? "Unchanged" :
+                      priceUp && volUp ? "Higher price + more usage" :
+                      priceUp && !volUp ? "Price hike (usage ↓ offset)" :
+                      !priceUp && volUp ? "More usage (price stable)" :
+                      !priceUp && !volUp ? "Lower price + less usage" :
+                      r.priceEffect < -0.005 && r.volEffect > 0.005 ? "Cheaper rate, more used" :
+                      "Mixed";
+                    return (
+                      <tr key={i} style={{ borderBottom: "1px solid #1e2132" }}>
+                        <td style={{ padding: "10px 16px", color: "#e5e7eb", maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.label}</td>
+                        <td style={{ padding: "10px 16px", color: "#9ca3af" }}>{r.month}</td>
+                        <td style={{ padding: "10px 16px", color: r.priceEffect > 0 ? "#ef4444" : r.priceEffect < 0 ? "#22c55e" : "#6b7280", fontVariantNumeric: "tabular-nums" }}>
+                          {r.priceEffect > 0 ? "+" : ""}€{r.priceEffect.toFixed(2)}
+                        </td>
+                        <td style={{ padding: "10px 16px", color: r.volEffect > 0 ? "#f59e0b" : r.volEffect < 0 ? "#22c55e" : "#6b7280", fontVariantNumeric: "tabular-nums" }}>
+                          {r.volEffect > 0 ? "+" : ""}€{r.volEffect.toFixed(2)}
+                        </td>
+                        <td style={{ padding: "10px 16px", color: r.total > 0 ? "#ef4444" : r.total < 0 ? "#22c55e" : "#6b7280", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
+                          {r.total > 0 ? "+" : ""}€{r.total.toFixed(2)}
+                        </td>
+                        <td style={{ padding: "10px 16px", color: "#9ca3af", fontSize: 12 }}>{interpretation}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* 12. Month-vs-month line item comparison table */}
+      {comparisonItems.length > 0 && prevMonthLabel && latestMonthLabel && (
+        <>
+          <SectionTitle>📋 12. Line-Item Comparison: {prevMonthLabel} vs {latestMonthLabel}</SectionTitle>
+          <div style={{ background: "#1a1d27", border: "1px solid #2d3148", borderRadius: 12, overflow: "hidden" }}>
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                <thead>
+                  <tr style={{ borderBottom: "1px solid #2d3148" }}>
+                    {["Line Item", `${prevMonthLabel} (€)`, `${latestMonthLabel} (€)`, "Change (€)", "Unit price change", "Qty change"].map(h => (
+                      <th key={h} style={{ padding: "10px 16px", textAlign: "left", color: "#6b7280", fontWeight: 600, fontSize: 11, textTransform: "uppercase", whiteSpace: "nowrap" }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {comparisonItems.map((row, i) => (
+                    <tr key={i} style={{ borderBottom: i < comparisonItems.length - 1 ? "1px solid #1e2132" : "none", background: Math.abs(row.amtDiff) > 10 ? "rgba(239,68,68,0.04)" : "transparent" }}>
+                      <td style={{ padding: "10px 16px", color: "#e5e7eb", maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{row.label}</td>
+                      <td style={{ padding: "10px 16px", color: "#9ca3af", fontVariantNumeric: "tabular-nums" }}>
+                        {row.prev ? `€${row.prev.amount_eur.toFixed(2)}` : "—"}
+                      </td>
+                      <td style={{ padding: "10px 16px", color: "#e5e7eb", fontVariantNumeric: "tabular-nums" }}>
+                        {row.curr ? `€${row.curr.amount_eur.toFixed(2)}` : "—"}
+                      </td>
+                      <td style={{ padding: "10px 16px", fontWeight: 600, fontVariantNumeric: "tabular-nums", color: row.amtDiff > 0.5 ? "#ef4444" : row.amtDiff < -0.5 ? "#22c55e" : "#6b7280" }}>
+                        {!row.prev || !row.curr ? "—" : `${row.amtDiff > 0 ? "+" : ""}€${row.amtDiff.toFixed(2)}`}
+                      </td>
+                      <td style={{ padding: "10px 16px", fontVariantNumeric: "tabular-nums", fontSize: 12, color: row.priceDiff == null ? "#4b5563" : row.priceDiff > 0.001 ? "#ef4444" : row.priceDiff < -0.001 ? "#22c55e" : "#6b7280" }}>
+                        {row.priceDiff == null ? "—" :
+                          `${row.priceDiff > 0 ? "+" : ""}€${row.priceDiff.toFixed(4)}/unit`}
+                      </td>
+                      <td style={{ padding: "10px 16px", fontVariantNumeric: "tabular-nums", fontSize: 12, color: "#9ca3af" }}>
+                        {row.prev?.quantity != null && row.curr?.quantity != null
+                          ? `${row.prev.quantity} → ${row.curr.quantity} ${row.curr.unit || ""}`
+                          : "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
 
       <div style={{ height: 40 }} />
     </div>
