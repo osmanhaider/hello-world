@@ -11,6 +11,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from translation import enrich_parsed
+from parser import parse_bill as parse_bill_tesseract
+
+# Parser backend: "tesseract" (default, no API key) or "claude" (uses Anthropic API)
+PARSER_BACKEND = os.environ.get("PARSER_BACKEND", "tesseract").lower()
 
 DB_PATH = "bills.db"
 UPLOADS_DIR = "uploads"
@@ -164,10 +168,13 @@ async def upload_bill(file: UploadFile = File(...)):
         f.write(contents)
 
     try:
-        parsed = parse_bill_with_claude(save_path)
-        parsed = enrich_parsed(parsed)  # add translations locally — no extra API call
+        if PARSER_BACKEND == "claude":
+            parsed = parse_bill_with_claude(save_path)
+        else:
+            parsed = parse_bill_tesseract(save_path)
+        parsed = enrich_parsed(parsed)  # add translations locally — no API call
     except Exception as e:
-        parsed = {"error": str(e)}
+        parsed = {"error": str(e), "_source": PARSER_BACKEND}
 
     now = datetime.utcnow().isoformat()
     async with aiosqlite.connect(DB_PATH) as db:
