@@ -29,6 +29,22 @@ const PALETTE = [
   "#0ea5e9", "#ec4899", "#14b8a6", "#f97316", "#6366f1",
 ];
 
+const TYPE_LABELS: Record<string, string> = {
+  electricity: "Electricity",
+  gas: "Gas",
+  water: "Water",
+  heating: "Heating",
+  internet: "Internet",
+  telecom: "Telecom",
+  waste: "Waste",
+  management: "Management",
+  other: "Other",
+};
+
+function labelFor(t: string) {
+  return TYPE_LABELS[t] ?? t.charAt(0).toUpperCase() + t.slice(1);
+}
+
 function colorFor(t: string, i = 0) {
   return COLORS[t] ?? PALETTE[i % PALETTE.length];
 }
@@ -619,7 +635,7 @@ export default function AnalyticsTab() {
                 innerRadius={60}
                 outerRadius={100}
                 paddingAngle={2}
-                label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
+                label={({ name, percent }) => `${labelFor(name)} ${((percent ?? 0) * 100).toFixed(0)}%`}
                 labelLine={false}
               >
                 {data.by_type.map((entry, i) => (
@@ -740,7 +756,7 @@ export default function AnalyticsTab() {
                 <td style={{ padding: "12px 16px" }}>
                   <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     <span style={{ width: 8, height: 8, borderRadius: "50%", background: colorFor(row.utility_type, i), display: "inline-block" }} />
-                    <span style={{ color: "white", textTransform: "capitalize" }}>{row.utility_type}</span>
+                    <span style={{ color: "white" }}>{labelFor(row.utility_type)}</span>
                   </span>
                 </td>
                 <td style={{ padding: "12px 16px", color: "#9ca3af" }}>{row.bill_count}</td>
