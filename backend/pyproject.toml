@@ -18,5 +18,8 @@ ignore = [
 "render_preview.py" = ["E402"]     # conditional import for optional dep
 
 [tool.pytest.ini_options]
-testpaths = ["."]
-python_files = ["test_*.py"]
+# Only collect pytest-style test files. The other test_*.py scripts
+# (test_parser.py, test_december.py, test_pdf.py) are stand-alone
+# integration scripts that run OCR at import time — they're kept as
+# manual smoke-tests and are not executed by CI.
+testpaths = ["test_claude_parser.py"]

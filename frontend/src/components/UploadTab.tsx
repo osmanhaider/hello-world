@@ -128,7 +128,7 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
         )}
       </div>
 
-      {isSuccess && parsed && parsed._low_quality && (
+      {isSuccess && parsed && Boolean(parsed._low_quality) && (
         <div style={{
           ...cardStyle,
           marginTop: 24,

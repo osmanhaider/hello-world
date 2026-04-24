@@ -704,7 +704,11 @@ export default function AnalyticsTab() {
                 innerRadius={55}
                 outerRadius={95}
                 paddingAngle={2}
-                label={({ cx, cy, midAngle, innerRadius, outerRadius, percent }) => {
+                label={(props) => {
+                  const { cx, cy, midAngle, innerRadius, outerRadius, percent } = props as {
+                    cx: number; cy: number; midAngle: number;
+                    innerRadius: number; outerRadius: number; percent: number;
+                  };
                   if (!percent || percent < 0.04) return null;
                   const RAD = Math.PI / 180;
                   const r = (innerRadius + outerRadius) / 2;
