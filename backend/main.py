@@ -7,18 +7,22 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
 import aiosqlite
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from parser import parse_bill as parse_bill_tesseract
+from parser_openrouter import parse_bill_with_openrouter
 from translation import classify_line_item, enrich_parsed
 
 logger = logging.getLogger("utility_tracker")
 logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"))
 
-# Parser backend: "tesseract" (default, no API key) or "claude" (uses Anthropic API)
+# Parser backend: "tesseract" (default, no API key), "claude" (Anthropic API),
+# or "openrouter" (OpenRouter multi-model API)
 PARSER_BACKEND = os.environ.get("PARSER_BACKEND", "tesseract").lower()
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
+OPENROUTER_MODEL = os.environ.get("OPENROUTER_MODEL", "google/gemini-2.0-flash-exp:free")
 
 DB_PATH = os.environ.get("DB_PATH", "bills.db")
 UPLOADS_DIR = os.environ.get("UPLOADS_DIR", "uploads")
@@ -202,7 +206,11 @@ List every charge line visible. Use null for any field you cannot determine. Ret
 
 
 @app.post("/api/bills/upload")
-async def upload_bill(file: UploadFile = File(...)):
+async def upload_bill(
+    file: UploadFile = File(...),
+    parser: str | None = Form(None),
+    model: str | None = Form(None),
+):
     if file.content_type not in _ALLOWED_MIME:
         raise HTTPException(400, "Unsupported file type. Upload an image or PDF.")
 
@@ -231,17 +239,24 @@ async def upload_bill(file: UploadFile = File(...)):
                 )
             f.write(chunk)
 
+    effective_parser = (parser or PARSER_BACKEND).lower()
     try:
-        if PARSER_BACKEND == "claude":
+        if effective_parser == "claude":
             parsed = parse_bill_with_claude(save_path)
+        elif effective_parser == "openrouter":
+            parsed = parse_bill_with_openrouter(
+                save_path,
+                api_key=OPENROUTER_API_KEY,
+                model=model or OPENROUTER_MODEL,
+            )
         else:
             parsed = parse_bill_tesseract(save_path)
         parsed = enrich_parsed(parsed)  # add translations locally — no API call
     except Exception:
-        logger.exception("Bill parsing failed for %s (backend=%s)", filename, PARSER_BACKEND)
+        logger.exception("Bill parsing failed for %s (backend=%s)", filename, effective_parser)
         parsed = {
             "error": "Parsing failed — see server logs for details.",
-            "_source": PARSER_BACKEND,
+            "_source": effective_parser,
             "_low_quality": True,
         }
 
