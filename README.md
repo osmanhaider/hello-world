@@ -34,17 +34,61 @@ Runs **entirely locally** — no API key required.
               └─────────────────┘           └────────────────┘
 ```
 
-## Quick start
+## Run locally
 
-### 1. System dependencies
+### Prerequisites
+
+You need **Python 3.10+** and **Node.js 18+**. Verify with:
+```bash
+python3 --version
+node --version
+```
+
+### 1. Clone the repo
 
 ```bash
-# Tesseract with Estonian language pack
+git clone https://github.com/osmanhaider/hello-world.git
+cd hello-world
+```
+
+### 2. Install system dependencies
+
+Pick the block for your OS — this installs Tesseract (OCR engine), the **Estonian** language pack, and poppler (PDF rasteriser):
+
+<details>
+<summary><strong>macOS (Homebrew)</strong></summary>
+
+```bash
+brew install tesseract tesseract-lang poppler
+```
+`tesseract-lang` bundles the Estonian training data. Verify with `tesseract --list-langs` — you should see `est` in the output.
+</details>
+
+<details>
+<summary><strong>Ubuntu / Debian</strong></summary>
+
+```bash
+sudo apt-get update
 sudo apt-get install -y tesseract-ocr tesseract-ocr-est tesseract-ocr-eng \
                         poppler-utils
 ```
+</details>
 
-### 2. Backend
+<details>
+<summary><strong>Fedora / RHEL</strong></summary>
+
+```bash
+sudo dnf install -y tesseract tesseract-langpack-est poppler-utils
+```
+</details>
+
+Sanity check:
+```bash
+tesseract --list-langs        # must include 'est'
+which pdftoppm                # must print a path
+```
+
+### 3. Start the backend
 
 ```bash
 cd backend
@@ -52,30 +96,59 @@ python3 -m venv venv
 ./venv/bin/pip install fastapi uvicorn python-multipart anthropic aiosqlite \
                       pillow pdf2image pytesseract pdfplumber
 
-# Start the server (no API key needed — uses Tesseract by default)
+# Optional — seed 3 demo bills so the dashboard is populated immediately
+./venv/bin/python seed_demo.py
+
+# Run the API server (leave this terminal open)
 ./venv/bin/uvicorn main:app --port 8000
 ```
 
+Backend is now at **http://localhost:8000**.
+
 Backend env vars:
 - `PARSER_BACKEND=tesseract` *(default)* — open-source, local, no API key
-- `PARSER_BACKEND=claude` — Anthropic Claude API (requires `ANTHROPIC_API_KEY`)
+- `PARSER_BACKEND=claude` — Anthropic Claude API, requires `ANTHROPIC_API_KEY`
 
-### 3. Frontend
+### 4. Start the frontend (in a second terminal)
 
 ```bash
 cd frontend
 npm install
 npm run dev
-# Open http://localhost:5173
 ```
 
-### 4. Optional: seed demo data
+Open **http://localhost:5173** in your browser. You'll see three tabs: **Upload**, **Bills**, **Analytics**.
 
-Three synthetic korteriühistu bills to see the dashboard populated:
+### 5. Try it
 
+1. Go to **Upload** → drag in a PDF or image of an Estonian utility bill → the parser extracts line items and translates them on the spot.
+2. Open the **Bills** tab to see everything stored with expandable per-bill details.
+3. Open **Analytics** to explore 12 dashboard sections — click **Download PDF** to export.
+
+## Troubleshooting
+
+**`tesseract: command not found`**
+Tesseract isn't installed. Re-run step 2 for your OS.
+
+**`est.traineddata not found` / only `eng` listed**
+The Estonian language pack is missing. On macOS: `brew install tesseract-lang`. On Ubuntu: `sudo apt-get install tesseract-ocr-est`.
+
+**`pip install` fails with `401 Error, Credentials not correct`**
+Your pip is pointing at a private corporate index (e.g. AWS CodeArtifact). Bypass it for this one command:
 ```bash
-cd backend && ./venv/bin/python seed_demo.py
+./venv/bin/pip install --index-url https://pypi.org/simple/ \
+    fastapi uvicorn python-multipart anthropic aiosqlite \
+    pillow pdf2image pytesseract pdfplumber
 ```
+
+**`Failed to fetch` / CORS error in browser**
+The backend must be on port 8000 — the frontend is hardcoded to that URL in `frontend/src/api.ts`. If you change the port, update `BASE` there too.
+
+**Port already in use (`[Errno 48] Address already in use`)**
+Something else is on port 8000. Either kill it (`lsof -ti:8000 | xargs kill`) or change the port: `./venv/bin/uvicorn main:app --port 8001` + update `BASE` in `frontend/src/api.ts`.
+
+**Dashboard shows no data**
+Either no bills uploaded yet, or the backend isn't running. Check the **Upload** tab works, or run `python seed_demo.py` to load three sample bills.
 
 ## Parser accuracy
 
