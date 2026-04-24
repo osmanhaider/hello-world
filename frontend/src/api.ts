@@ -18,9 +18,11 @@ axios.interceptors.request.use((config) => {
 axios.interceptors.response.use(
   (r) => r,
   (err) => {
-    if (err?.response?.status === 401) {
+    // Don't treat a wrong-password 401 from the login endpoint as a session
+    // expiry — let LoginScreen's own catch block handle it and show the error.
+    const isLoginEndpoint = String(err?.config?.url ?? "").includes("/api/auth/login");
+    if (err?.response?.status === 401 && !isLoginEndpoint) {
       clearToken();
-      // Nudge the app to re-render; LoginScreen listens for this.
       window.dispatchEvent(new Event("auth:logout"));
     }
     return Promise.reject(err);
