@@ -1,5 +1,9 @@
 # Estonia Utility Bill Tracker
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)
+![Node 18+](https://img.shields.io/badge/node-18%2B-green)
+
 Upload monthly utility bills (images or PDFs), get them parsed and translated from Estonian to English automatically, and explore spending patterns through a 12-section analytics dashboard.
 
 Runs **entirely locally** — no API key required.
@@ -220,8 +224,15 @@ The "Download PDF" button in the Analytics header captures the whole dashboard v
 
 Filename: `utility-bills-dashboard-YYYY-MM-DD.pdf`
 
+## Contributing
+
+Bug reports, PRs and Estonian term additions are welcome. Fork, branch, send a pull request —
+the codebase is small, tests live in `backend/test_*.py`, and the frontend type-checks with
+`tsc --noEmit` and builds with `vite build`.
+
 ## License
 
-Public domain (repo is a demo).
+[MIT](LICENSE) © 2026 Osman Haider.
 
-Tesseract is Apache-2.0. pdfplumber, html2canvas and jsPDF are MIT-licensed.
+Third-party components keep their own licenses: Tesseract is Apache-2.0; pdfplumber, pdf2image,
+FastAPI, Recharts, html2canvas and jsPDF are MIT.
