@@ -2,11 +2,13 @@ import base64
 import json
 import logging
 import os
+import time
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
 import aiosqlite
+import httpx
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -418,6 +420,65 @@ async def delete_bill(bill_id: str):
         await db.execute("DELETE FROM bills WHERE id = ?", (bill_id,))
         await db.commit()
     return {"status": "deleted"}
+
+
+# In-memory cache of OpenRouter's model list. OpenRouter changes which
+# models are free/paid quite often, but not minute-to-minute — a 1-hour
+# cache keeps us fresh without hammering their API on every upload tab load.
+_openrouter_cache: dict = {"expires": 0.0, "models": []}
+_OPENROUTER_CACHE_TTL = 3600  # 1 hour
+
+
+@app.get("/api/openrouter-models")
+async def openrouter_models():
+    """Return the currently-available free vision models on OpenRouter.
+    Cached for 1 hour. Falls back to a hardcoded list if OpenRouter is
+    unreachable."""
+    now = time.time()
+    if _openrouter_cache["expires"] > now and _openrouter_cache["models"]:
+        return {"models": _openrouter_cache["models"], "cached": True}
+
+    fallback = [
+        {"id": "google/gemini-2.0-flash-exp:free", "label": "Gemini 2.0 Flash (fallback)"},
+    ]
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as c:
+            r = await c.get("https://openrouter.ai/api/v1/models")
+            r.raise_for_status()
+            data = r.json()
+    except Exception:
+        logger.exception("Failed to fetch OpenRouter model list")
+        return {"models": fallback, "cached": False, "error": "Could not fetch live list — using fallback."}
+
+    free_vision: list[dict] = []
+    for m in data.get("data", []):
+        pricing = m.get("pricing") or {}
+        # Free means both prompt and completion are priced at 0
+        if str(pricing.get("prompt", "")) != "0" or str(pricing.get("completion", "")) != "0":
+            continue
+        modalities = (m.get("architecture") or {}).get("input_modalities") or []
+        if "image" not in modalities:
+            continue
+        mid = m.get("id")
+        name = m.get("name") or mid
+        if mid:
+            free_vision.append({"id": mid, "label": name})
+
+    # Sort so the best-known vendors float to the top
+    priority = ["google/", "meta-llama/", "qwen/", "mistralai/"]
+    def _rank(m: dict) -> int:
+        for i, p in enumerate(priority):
+            if m["id"].startswith(p):
+                return i
+        return len(priority)
+    free_vision.sort(key=lambda m: (_rank(m), m["id"]))
+
+    if not free_vision:
+        free_vision = fallback
+
+    _openrouter_cache["models"] = free_vision
+    _openrouter_cache["expires"] = now + _OPENROUTER_CACHE_TTL
+    return {"models": free_vision, "cached": False}
 
 
 @app.get("/api/analytics/summary")

@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { api } from "../api";
 import { Upload, CheckCircle, AlertCircle, Loader2, RefreshCw } from "lucide-react";
 
@@ -19,14 +19,12 @@ interface UploadTabProps {
 type Status = "idle" | "uploading" | "success" | "replaced" | "error";
 type ParserMode = "tesseract" | "openrouter";
 
-// Free vision models on OpenRouter. The list is deliberately short and
-// conservative — OpenRouter changes their free tier often, so we only
-// include models that have been stable. Users can pick "Custom…" to
-// paste any model ID they find on https://openrouter.ai/models.
-const FREE_MODELS = [
-  { id: "google/gemini-2.0-flash-exp:free", label: "Gemini 2.0 Flash (recommended)" },
-  { id: "meta-llama/llama-3.2-11b-vision-instruct:free", label: "Llama 3.2 11B Vision" },
-  { id: "qwen/qwen2-vl-7b-instruct:free", label: "Qwen2-VL 7B" },
+// Fallback list if the backend can't fetch the live list from OpenRouter.
+// The live list comes from GET /api/openrouter-models and is fetched on
+// mount — OpenRouter changes their free tier often enough that a hardcoded
+// list goes stale within weeks.
+const FALLBACK_MODELS = [
+  { id: "google/gemini-2.0-flash-exp:free", label: "Gemini 2.0 Flash" },
   { id: "__custom__", label: "Custom model ID…" },
 ];
 
@@ -36,9 +34,30 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
   const [parsed, setParsed] = useState<Record<string, unknown> | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
   const [parserMode, setParserMode] = useState<ParserMode>("openrouter");
-  const [selectedModel, setSelectedModel] = useState(FREE_MODELS[0].id);
+  const [availableModels, setAvailableModels] = useState(FALLBACK_MODELS);
+  const [selectedModel, setSelectedModel] = useState(FALLBACK_MODELS[0].id);
   const [customModel, setCustomModel] = useState("");
+  const [modelsLoading, setModelsLoading] = useState(true);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.getOpenRouterModels()
+      .then(res => {
+        if (cancelled) return;
+        const live = res.data.models || [];
+        const withCustom = [...live, { id: "__custom__", label: "Custom model ID…" }];
+        setAvailableModels(withCustom);
+        if (live.length > 0) setSelectedModel(live[0].id);
+      })
+      .catch(() => {
+        // Backend unreachable or failed — fallback list is already in state.
+      })
+      .finally(() => {
+        if (!cancelled) setModelsLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, []);
 
   const handleFile = useCallback(async (file: File) => {
     setStatus("uploading");
@@ -119,10 +138,13 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
 
         {parserMode === "openrouter" && (
           <div>
-            <label style={{ fontSize: 12, color: "#9ca3af", display: "block", marginBottom: 4 }}>Model</label>
+            <label style={{ fontSize: 12, color: "#9ca3af", display: "block", marginBottom: 4 }}>
+              Model {modelsLoading ? "(loading live list…)" : `(${availableModels.length - 1} available)`}
+            </label>
             <select
               value={selectedModel}
               onChange={(e) => setSelectedModel(e.target.value)}
+              disabled={modelsLoading}
               style={{
                 width: "100%",
                 background: "#252838",
@@ -131,10 +153,11 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
                 color: "#e5e7eb",
                 padding: "7px 10px",
                 fontSize: 13,
-                cursor: "pointer",
+                cursor: modelsLoading ? "wait" : "pointer",
+                opacity: modelsLoading ? 0.6 : 1,
               }}
             >
-              {FREE_MODELS.map(m => (
+              {availableModels.map(m => (
                 <option key={m.id} value={m.id}>{m.label}</option>
               ))}
             </select>
