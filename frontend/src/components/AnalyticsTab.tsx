@@ -258,25 +258,63 @@ export default function AnalyticsTab() {
 
       {/* 1. Total spend over time */}
       <SectionTitle>📈 1. Monthly Spending Trend &amp; Rolling Average</SectionTitle>
-      <ChartCard title="Total Monthly Spend" subtitle="Blue area = actual spend · Dashed = 3-month rolling average">
-        <ResponsiveContainer width="100%" height={260}>
-          <AreaChart data={data.monthly_total}>
-            <defs>
-              <linearGradient id="totalGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#2563eb" stopOpacity={0.3} />
-                <stop offset="95%" stopColor="#2563eb" stopOpacity={0} />
-              </linearGradient>
-            </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="#2d3148" />
-            <XAxis dataKey="month" tick={{ fill: "#6b7280", fontSize: 12 }} />
-            <YAxis tick={{ fill: "#6b7280", fontSize: 12 }} tickFormatter={v => `€${v}`} />
-            <Tooltip {...tooltipStyle} formatter={fmtEur} />
-            <Legend />
-            <Area type="monotone" dataKey="total_eur" stroke="#2563eb" fill="url(#totalGrad)" name="Monthly Total" strokeWidth={2} />
-            <Line type="monotone" dataKey="rolling_avg_3m" stroke="#f59e0b" strokeDasharray="5 5" name="3-Month Avg" strokeWidth={2} dot={false} />
-          </AreaChart>
-        </ResponsiveContainer>
-      </ChartCard>
+      <div style={grid2}>
+        <ChartCard title="Total Monthly Spend — Line" subtitle="Clean line chart of monthly total with labeled points">
+          <ResponsiveContainer width="100%" height={260}>
+            <LineChart data={data.monthly_total} margin={{ top: 20, right: 20, left: 0, bottom: 5 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#2d3148" />
+              <XAxis dataKey="month" tick={{ fill: "#6b7280", fontSize: 12 }} />
+              <YAxis tick={{ fill: "#6b7280", fontSize: 12 }} tickFormatter={v => `€${v}`} />
+              <Tooltip {...tooltipStyle} formatter={fmtEur} />
+              <Legend />
+              <Line
+                type="monotone"
+                dataKey="total_eur"
+                stroke="#2563eb"
+                strokeWidth={3}
+                name="Monthly Total"
+                dot={{ r: 5, fill: "#2563eb", strokeWidth: 2, stroke: "#0b0d14" }}
+                activeDot={{ r: 7 }}
+                label={{
+                  position: "top",
+                  fill: "#e5e7eb",
+                  fontSize: 11,
+                  formatter: (v: unknown) => `€${(v as number).toFixed(0)}`,
+                }}
+              />
+              <Line
+                type="monotone"
+                dataKey="rolling_avg_3m"
+                stroke="#f59e0b"
+                strokeDasharray="5 5"
+                strokeWidth={2}
+                name="3-Month Avg"
+                dot={false}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </ChartCard>
+
+        <ChartCard title="Total Monthly Spend — Area" subtitle="Filled area view · Dashed line = 3-month rolling average">
+          <ResponsiveContainer width="100%" height={260}>
+            <AreaChart data={data.monthly_total}>
+              <defs>
+                <linearGradient id="totalGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#2563eb" stopOpacity={0.3} />
+                  <stop offset="95%" stopColor="#2563eb" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#2d3148" />
+              <XAxis dataKey="month" tick={{ fill: "#6b7280", fontSize: 12 }} />
+              <YAxis tick={{ fill: "#6b7280", fontSize: 12 }} tickFormatter={v => `€${v}`} />
+              <Tooltip {...tooltipStyle} formatter={fmtEur} />
+              <Legend />
+              <Area type="monotone" dataKey="total_eur" stroke="#2563eb" fill="url(#totalGrad)" name="Monthly Total" strokeWidth={2} />
+              <Line type="monotone" dataKey="rolling_avg_3m" stroke="#f59e0b" strokeDasharray="5 5" name="3-Month Avg" strokeWidth={2} dot={false} />
+            </AreaChart>
+          </ResponsiveContainer>
+        </ChartCard>
+      </div>
 
       {/* 2. MoM & YoY % Change */}
       {(momRows.length > 0 || yoyRows.length > 0) && (
