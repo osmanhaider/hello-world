@@ -1,11 +1,13 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, type AnalyticsSummary } from "../api";
 import {
   LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, RadarChart, Radar,
   PolarGrid, PolarAngleAxis, AreaChart, Area, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer,
 } from "recharts";
-import { TrendingUp, TrendingDown, Minus, Loader2, AlertCircle } from "lucide-react";
+import { TrendingUp, TrendingDown, Minus, Loader2, AlertCircle, Download } from "lucide-react";
+import html2canvas from "html2canvas";
+import jsPDF from "jspdf";
 
 const COLORS: Record<string, string> = {
   electricity: "#f59e0b",
@@ -87,10 +89,57 @@ const tooltipStyle = {
 export default function AnalyticsTab() {
   const [data, setData] = useState<AnalyticsSummary | null>(null);
   const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
+  const dashboardRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     api.getAnalytics().then(r => { setData(r.data); setLoading(false); });
   }, []);
+
+  async function exportToPDF() {
+    if (!dashboardRef.current) return;
+    setExporting(true);
+    try {
+      const canvas = await html2canvas(dashboardRef.current, {
+        backgroundColor: "#0b0d14",
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        windowWidth: dashboardRef.current.scrollWidth,
+        windowHeight: dashboardRef.current.scrollHeight,
+      });
+
+      const imgData = canvas.toDataURL("image/png");
+      const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      const pageWidth = pdf.internal.pageSize.getWidth();   // 210mm
+      const pageHeight = pdf.internal.pageSize.getHeight(); // 297mm
+
+      const imgWidth = pageWidth - 20;                      // 10mm margin each side
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+      let heightLeft = imgHeight;
+      let position = 10;                                    // top margin
+      const pagePixelHeight = pageHeight - 20;              // usable height per page
+
+      pdf.addImage(imgData, "PNG", 10, position, imgWidth, imgHeight);
+      heightLeft -= pagePixelHeight;
+
+      while (heightLeft > 0) {
+        position = 10 - (imgHeight - heightLeft);
+        pdf.addPage();
+        pdf.addImage(imgData, "PNG", 10, position, imgWidth, imgHeight);
+        heightLeft -= pagePixelHeight;
+      }
+
+      const stamp = new Date().toISOString().slice(0, 10);
+      pdf.save(`utility-bills-dashboard-${stamp}.pdf`);
+    } catch (err) {
+      console.error("Export failed:", err);
+      alert("Failed to export PDF. See console for details.");
+    } finally {
+      setExporting(false);
+    }
+  }
 
   if (loading) return (
     <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: 200, gap: 12, color: "#9ca3af" }}>
@@ -222,14 +271,48 @@ export default function AnalyticsTab() {
 
   return (
     <div>
-      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 24, flexWrap: "wrap", gap: 8 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24, flexWrap: "wrap", gap: 8 }}>
         <div>
           <h2 style={{ color: "white", margin: 0, fontSize: 22 }}>Analytics Dashboard</h2>
           <p style={{ color: "#9ca3af", margin: "4px 0 0", fontSize: 13 }}>
             {data.by_type.reduce((s, t) => s + t.bill_count, 0)} bills · {types.length} utility types
           </p>
         </div>
+        <button
+          onClick={exportToPDF}
+          disabled={exporting}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 8,
+            padding: "10px 16px",
+            background: exporting ? "#374151" : "#2563eb",
+            color: "white",
+            border: "none",
+            borderRadius: 8,
+            fontSize: 13,
+            fontWeight: 600,
+            cursor: exporting ? "wait" : "pointer",
+            transition: "background 120ms",
+          }}
+          onMouseEnter={e => { if (!exporting) e.currentTarget.style.background = "#1d4ed8"; }}
+          onMouseLeave={e => { if (!exporting) e.currentTarget.style.background = "#2563eb"; }}
+        >
+          {exporting ? (
+            <>
+              <Loader2 size={16} style={{ animation: "spin 1s linear infinite" }} />
+              Exporting…
+            </>
+          ) : (
+            <>
+              <Download size={16} />
+              Download PDF
+            </>
+          )}
+        </button>
       </div>
+
+      <div ref={dashboardRef}>
 
       {/* KPI Cards */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 16, marginBottom: 8 }}>
@@ -746,6 +829,7 @@ export default function AnalyticsTab() {
       )}
 
       <div style={{ height: 40 }} />
+      </div>
     </div>
   );
 }
