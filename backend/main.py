@@ -343,6 +343,10 @@ async def analytics_summary():
         row["yoy_delta_pct"] = round((row["total_eur"] - prev) / prev * 100, 1) if prev else None
 
     # Line-item level trends — extracted from raw_json of every bill
+    import re as _re_li
+    _suffix_en = _re_li.compile(r"\s*\[Start:.*?\]\s*$")
+    _suffix_et = _re_li.compile(r"\s+[Aa]lg[:\s].*$")
+
     line_item_trends: list[dict] = []
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
@@ -368,11 +372,15 @@ async def analytics_summary():
             unit = (item.get("unit") or "").lower()
             if not en or amount is None:
                 continue
+            # Strip per-bill meter-reading suffixes so the same item
+            # aggregates across months.
+            en_key = _suffix_en.sub("", en).strip()
+            et_key = _suffix_et.sub("", et).strip()
             unit_price = round(amount / qty, 4) if qty and qty != 0 else None
             line_item_trends.append({
                 "month": month,
-                "description_en": en,
-                "description_et": et,
+                "description_en": en_key,
+                "description_et": et_key,
                 "amount_eur": round(amount, 2),
                 "quantity": qty,
                 "unit": unit,
