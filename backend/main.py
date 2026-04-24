@@ -16,17 +16,18 @@ from pydantic import BaseModel
 
 import auth as auth_mod
 from parser import parse_bill as parse_bill_tesseract
-from parser_openrouter import parse_bill_with_openrouter_chain
+from parser_freellmapi import parse_bill_with_freellmapi
 from translation import classify_line_item, enrich_parsed
 
 logger = logging.getLogger("utility_tracker")
 logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"))
 
 # Parser backend: "tesseract" (default, no API key), "claude" (Anthropic API),
-# or "openrouter" (OpenRouter multi-model API)
+# or "freellmapi" (FreeLLMAPI text-only proxy)
 PARSER_BACKEND = os.environ.get("PARSER_BACKEND", "tesseract").lower()
-OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
-OPENROUTER_MODEL = os.environ.get("OPENROUTER_MODEL", "google/gemini-2.0-flash-exp:free")
+FREELLMAPI_BASE_URL = os.environ.get("FREELLMAPI_BASE_URL", "http://localhost:3001")
+FREELLMAPI_API_KEY = os.environ.get("FREELLMAPI_API_KEY") or None
+FREELLMAPI_MODEL = os.environ.get("FREELLMAPI_MODEL", "auto")
 
 DB_PATH = os.environ.get("DB_PATH", "bills.db")
 UPLOADS_DIR = os.environ.get("UPLOADS_DIR", "uploads")
@@ -369,15 +370,12 @@ async def upload_bill(
     try:
         if effective_parser == "claude":
             parsed = parse_bill_with_claude(save_path)
-        elif effective_parser == "openrouter":
-            # Auto-fallback: try the user's selected model first, then
-            # cascade through the top free vision models if it's delisted,
-            # rate-limited, or returns junk.
-            chain = await _build_openrouter_chain(model or OPENROUTER_MODEL)
-            parsed = parse_bill_with_openrouter_chain(
+        elif effective_parser == "freellmapi":
+            parsed = parse_bill_with_freellmapi(
                 save_path,
-                api_key=OPENROUTER_API_KEY,
-                models=chain,
+                base_url=FREELLMAPI_BASE_URL,
+                api_key=FREELLMAPI_API_KEY,
+                model=model or FREELLMAPI_MODEL,
             )
         else:
             parsed = parse_bill_tesseract(save_path)
@@ -569,85 +567,67 @@ async def delete_bill(bill_id: str, user_id: str = Depends(get_user_id)):
     return {"status": "deleted"}
 
 
-# In-memory cache of OpenRouter's model list. OpenRouter changes which
-# models are free/paid quite often, but not minute-to-minute — a 1-hour
-# cache keeps us fresh without hammering their API on every upload tab load.
-_openrouter_cache: dict = {"expires": 0.0, "models": []}
-_OPENROUTER_CACHE_TTL = 3600  # 1 hour
-_OPENROUTER_FALLBACK = [
-    {"id": "google/gemini-2.0-flash-exp:free", "label": "Gemini 2.0 Flash (fallback)"},
+# In-memory cache of FreeLLMAPI's model list. The list is DB-backed and
+# changes when the user edits the FreeLLM dashboard, so a short cache keeps
+# the upload tab responsive without hiding updates for long.
+_freellmapi_cache: dict = {"expires": 0.0, "models": []}
+_FREELLMAPI_CACHE_TTL = 60  # 1 minute
+_FREELLMAPI_FALLBACK = [
+    {"id": "auto", "label": "Auto (FreeLLMAPI router)"},
 ]
 
 
-async def _fetch_openrouter_free_vision() -> list[dict]:
-    """Return the cached (or freshly fetched) list of free vision models.
-    Always returns at least one entry — falls back to a hardcoded default
-    if OpenRouter is unreachable or returns nothing useful."""
+def _freellmapi_v1_url(path: str) -> str:
+    base = FREELLMAPI_BASE_URL.rstrip("/")
+    if base.endswith("/v1"):
+        return f"{base}{path}"
+    return f"{base}/v1{path}"
+
+
+async def _fetch_freellmapi_models() -> list[dict]:
+    """Return the cached (or freshly fetched) list of FreeLLMAPI models."""
     now = time.time()
-    if _openrouter_cache["expires"] > now and _openrouter_cache["models"]:
-        return _openrouter_cache["models"]
+    if _freellmapi_cache["expires"] > now and _freellmapi_cache["models"]:
+        return _freellmapi_cache["models"]
 
     try:
+        headers = {}
+        if FREELLMAPI_API_KEY:
+            headers["Authorization"] = f"Bearer {FREELLMAPI_API_KEY}"
         async with httpx.AsyncClient(timeout=10.0) as c:
-            r = await c.get("https://openrouter.ai/api/v1/models")
+            r = await c.get(_freellmapi_v1_url("/models"), headers=headers)
             r.raise_for_status()
             data = r.json()
     except Exception:
-        logger.exception("Failed to fetch OpenRouter model list")
-        return _OPENROUTER_FALLBACK
+        logger.exception("Failed to fetch FreeLLMAPI model list")
+        return _FREELLMAPI_FALLBACK
 
-    free_vision: list[dict] = []
+    models: list[dict] = [{"id": "auto", "label": "Auto (FreeLLMAPI router)"}]
+    seen = {"auto"}
     for m in data.get("data", []):
-        pricing = m.get("pricing") or {}
-        if str(pricing.get("prompt", "")) != "0" or str(pricing.get("completion", "")) != "0":
-            continue
-        modalities = (m.get("architecture") or {}).get("input_modalities") or []
-        if "image" not in modalities:
-            continue
         mid = m.get("id")
+        if not mid or mid in seen:
+            continue
+        owner = m.get("owned_by")
         name = m.get("name") or mid
-        if mid:
-            free_vision.append({"id": mid, "label": name})
+        label = f"{name} ({owner})" if owner else name
+        models.append({"id": mid, "label": label})
+        seen.add(mid)
 
-    priority = ["google/", "meta-llama/", "qwen/", "mistralai/"]
-    def _rank(m: dict) -> int:
-        for i, p in enumerate(priority):
-            if m["id"].startswith(p):
-                return i
-        return len(priority)
-    free_vision.sort(key=lambda m: (_rank(m), m["id"]))
+    if len(models) == 1:
+        models = _FREELLMAPI_FALLBACK
 
-    if not free_vision:
-        free_vision = _OPENROUTER_FALLBACK
-
-    _openrouter_cache["models"] = free_vision
-    _openrouter_cache["expires"] = now + _OPENROUTER_CACHE_TTL
-    return free_vision
+    _freellmapi_cache["models"] = models
+    _freellmapi_cache["expires"] = now + _FREELLMAPI_CACHE_TTL
+    return models
 
 
-@app.get("/api/openrouter-models")
-async def openrouter_models():
-    """Return currently-available free vision models on OpenRouter."""
-    cached_at = _openrouter_cache["expires"]
-    models = await _fetch_openrouter_free_vision()
+@app.get("/api/freellmapi-models")
+async def freellmapi_models():
+    """Return currently-enabled models from FreeLLMAPI."""
+    cached_at = _freellmapi_cache["expires"]
+    models = await _fetch_freellmapi_models()
     return {"models": models, "cached": cached_at > time.time()}
-
-
-async def _build_openrouter_chain(user_model: str, max_models: int = 4) -> list[str]:
-    """Build a fallback chain starting with the user's pick, followed by
-    the top free vision models from the live list. Deduplicates."""
-    chain = [user_model]
-    try:
-        live = await _fetch_openrouter_free_vision()
-    except Exception:
-        live = []
-    for m in live:
-        mid = m.get("id")
-        if mid and mid not in chain and not mid.startswith("__"):
-            chain.append(mid)
-        if len(chain) >= max_models:
-            break
-    return chain
 
 
 @app.get("/api/analytics/summary")

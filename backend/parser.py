@@ -13,6 +13,7 @@ gracefully for other Estonian utility bills.
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
 import os
 import re
 
@@ -57,6 +58,13 @@ def _est_date(s: str) -> str | None:
 
 
 # ── OCR layer ──────────────────────────────────────────────────────────────
+
+@dataclass(frozen=True)
+class ExtractedText:
+    text: str
+    boxes: list[dict]
+    source: str
+    confidence: str
 
 def ocr_image(path: str) -> tuple[str, list[dict]]:
     """Return (full_text, word_boxes). word_boxes is a list of
@@ -144,6 +152,37 @@ def pdf_native_words(path: str) -> tuple[str, list[dict]]:
                 })
             all_text.append(page.extract_text() or "")
     return "\n".join(all_text), boxes
+
+
+def extract_bill_text(path: str) -> ExtractedText:
+    """Extract invoice text once, choosing native PDF text before OCR."""
+    source = "tesseract"
+    confidence = "medium"
+
+    if path.lower().endswith(".pdf"):
+        # 1. Try native-text extraction first (most utility bills are vector PDFs)
+        try:
+            text, boxes = pdf_native_words(path)
+        except Exception:
+            text, boxes = "", []
+
+        if len(text) > 80 and len(boxes) > 20:
+            # Native text is available — use it directly, no OCR needed
+            return ExtractedText(text=text, boxes=boxes, source="pdfplumber", confidence="high")
+
+        # Scanned PDF: rasterize then OCR
+        img_path = _pdf_to_image(path)
+        try:
+            text, boxes = ocr_image(img_path)
+        finally:
+            try:
+                os.remove(img_path)
+            except OSError:
+                pass
+        return ExtractedText(text=text, boxes=boxes, source=source, confidence=confidence)
+
+    text, boxes = ocr_image(path)
+    return ExtractedText(text=text, boxes=boxes, source=source, confidence=confidence)
 
 
 # ── Field extractors ───────────────────────────────────────────────────────
@@ -342,32 +381,9 @@ def parse_bill(path: str) -> dict:
       PDF (scanned)       → pdf2image + OCR    → medium confidence
       Image (png/jpg/etc) → Tesseract OCR      → medium confidence
     """
-    source = "tesseract"
-    confidence = "medium"
-
-    if path.lower().endswith(".pdf"):
-        # 1. Try native-text extraction first (most utility bills are vector PDFs)
-        try:
-            text, boxes = pdf_native_words(path)
-        except Exception:
-            text, boxes = "", []
-
-        if len(text) > 80 and len(boxes) > 20:
-            # Native text is available — use it directly, no OCR needed
-            source = "pdfplumber"
-            confidence = "high"
-        else:
-            # Scanned PDF: rasterize then OCR
-            img_path = _pdf_to_image(path)
-            try:
-                text, boxes = ocr_image(img_path)
-            finally:
-                try:
-                    os.remove(img_path)
-                except OSError:
-                    pass
-    else:
-        text, boxes = ocr_image(path)
+    extracted = extract_bill_text(path)
+    text = extracted.text
+    boxes = extracted.boxes
 
     header = extract_header(text)
     line_items = extract_line_items(boxes)
@@ -389,7 +405,7 @@ def parse_bill(path: str) -> dict:
         "line_items": line_items,
         "consumption_kwh": kwh,
         "consumption_m3": m3,
-        "confidence": confidence,
-        "_source": source,
+        "confidence": extracted.confidence,
+        "_source": extracted.source,
         "_low_quality": _low_quality,
     }

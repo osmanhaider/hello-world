@@ -8,13 +8,13 @@ Upload any invoice or bill (image or PDF), get it parsed into structured line it
 
 Three extraction backends are available:
 - **Local OCR** *(default)* — Tesseract + `pdfplumber`, optimized for Estonian utility bills. Runs entirely locally, no API key required.
-- **Free AI via OpenRouter** *(recommended for non-Estonian or unusual invoices)* — pick any free vision model (Gemini, Gemma, Llama, Qwen…) per upload. Requires a free OpenRouter key. Set `PARSER_BACKEND=openrouter`.
+- **Free AI via FreeLLMAPI** *(recommended for non-Estonian or unusual invoices)* — local OCR/PDF text extraction followed by routed LLM JSON extraction. Set `PARSER_BACKEND=freellmapi`.
 - **Claude API** *(premium alternative)* — highest accuracy, paid. Set `PARSER_BACKEND=claude`.
 
 ## Features
 
-- **Three extraction backends** — local OCR for Estonian utility bills, free AI (OpenRouter) for anything else (rent, subscriptions, services, non-Estonian invoices, scanned docs with unusual layouts), Claude API as a premium option
-- **Per-upload model picker** — the UI fetches OpenRouter's live list of free vision models, the user picks one at upload time, and the backend auto-falls-back through up to 4 models if the first one is delisted or rate-limited
+- **Three extraction backends** — local OCR for Estonian utility bills, free AI (FreeLLMAPI) for anything else (rent, subscriptions, services, non-Estonian invoices, scanned docs with unusual layouts), Claude API as a premium option
+- **Per-upload model picker** — the UI fetches FreeLLMAPI's enabled model list, the user picks one at upload time, and FreeLLMAPI routes across configured provider keys
 - **Automatic quality detection** — if the local OCR can't read the invoice, the UI shows a warning banner directing the user to switch to an AI model
 - **Open-source OCR pipeline**: Tesseract for images, `pdfplumber` for native-text PDFs, `pdf2image` + OCR fallback for scanned PDFs
 - **Hardcoded Estonian→English dictionary** (~180 terms) — no API call needed for translation when using the local backend
@@ -50,14 +50,14 @@ Three extraction backends are available:
 # Tesseract backend (default):
 docker compose up --build
 
-# Free AI via OpenRouter (recommended for non-Estonian invoices):
-OPENROUTER_API_KEY=sk-or-v1-... PARSER_BACKEND=openrouter docker compose up --build
+# Free AI via FreeLLMAPI (recommended for non-Estonian invoices):
+PARSER_BACKEND=freellmapi docker compose up --build
 
 # Claude backend (paid):
 ANTHROPIC_API_KEY=sk-ant-... PARSER_BACKEND=claude docker compose up --build
 ```
 
-> 💡 Get a free OpenRouter key at https://openrouter.ai/keys — no credit card required. It unlocks every `:free` vision model (Gemini 2.0 Flash, Gemma 3, Llama 3.2 Vision, Qwen-VL, etc.).
+> Add provider keys in the FreeLLMAPI dashboard at http://localhost:3001, then use the utility app at http://localhost:5173.
 
 Open **http://localhost:5173**. Uploads and the SQLite DB are persisted in a named volume (`backend-data`).
 
@@ -75,9 +75,10 @@ A free-tier cloud setup: **Vercel** for the frontend, **Render** for the backend
    - **Environment**: `Docker` (uses `backend/Dockerfile`)
    - **Instance Type**: `Free`
 3. Add environment variables:
-   - `PARSER_BACKEND` = `openrouter`
-   - `OPENROUTER_API_KEY` = your key from https://openrouter.ai/keys
-   - `OPENROUTER_MODEL` = `google/gemini-2.0-flash-exp:free` *(optional; overridable per upload)*
+   - `PARSER_BACKEND` = `freellmapi`
+   - `FREELLMAPI_BASE_URL` = your FreeLLMAPI server URL
+   - `FREELLMAPI_API_KEY` = your FreeLLMAPI unified key *(if auth is enforced)*
+   - `FREELLMAPI_MODEL` = `auto` *(optional; overridable per upload)*
    - `APP_PASSWORD` = any password you'll type at the login screen
    - `AUTH_SECRET` = a long random hex string — generate locally with:
      ```
@@ -184,8 +185,8 @@ Backend is now at **http://localhost:8000**.
 
 Backend env vars (see `backend/.env.example` for the full list):
 - `PARSER_BACKEND=tesseract` *(default)* — open-source, local, no API key. Best on Estonian utility bills and korteriühistu invoices.
-- `PARSER_BACKEND=openrouter` — free AI vision models via OpenRouter, requires `OPENROUTER_API_KEY` (free, no credit card). Works on any invoice format, any language, any layout — use this if the Tesseract parser shows a low-quality warning. Optionally set `OPENROUTER_MODEL` (any `:free` vision model ID) as the default; users can still override it per upload in the UI.
-- `PARSER_BACKEND=claude` — Anthropic Claude API, requires `ANTHROPIC_API_KEY` (paid). Highest accuracy; use only if the free OpenRouter models aren't getting the job done.
+- `PARSER_BACKEND=freellmapi` — local OCR/PDF text extraction plus FreeLLMAPI structured JSON extraction. Requires `FREELLMAPI_BASE_URL` to point at a running FreeLLMAPI server. Optionally set `FREELLMAPI_API_KEY` and `FREELLMAPI_MODEL` (`auto` by default); users can still override the model per upload in the UI.
+- `PARSER_BACKEND=claude` — Anthropic Claude API, requires `ANTHROPIC_API_KEY` (paid). Highest accuracy; use only if FreeLLMAPI isn't getting the job done.
 - `APP_PASSWORD` — optional shared-password login gate. Unset = no login required.
 - `AUTH_SECRET` — required when `APP_PASSWORD` is set. 64-char hex, generate with `python -c "import secrets; print(secrets.token_hex(32))"`.
 - `MAX_UPLOAD_BYTES` — hard cap on upload size in bytes per file (default 25 MB). Multi-file uploads are supported; each file is bounded by this limit.
@@ -208,7 +209,7 @@ Open **http://localhost:5173** in your browser. You'll see three tabs: **Upload*
 
 ### 5. Try it
 
-1. Go to **Upload** → pick an extraction method (🔍 Local OCR or 🤖 AI / OpenRouter) and drag in your invoice. The local parser handles Estonian utility bills out of the box; for any other format, switch to the AI tab and pick any free vision model from the dropdown.
+1. Go to **Upload** → pick an extraction method (🔍 Local OCR or 🤖 AI / FreeLLMAPI) and drag in your invoice. The local parser handles Estonian utility bills out of the box; for any other format, switch to the AI tab and pick a FreeLLMAPI model from the dropdown.
 2. Open the **Bills** tab to see everything stored with expandable per-bill details.
 3. Open **Analytics** to explore 12 dashboard sections — click **Download PDF** to export.
 
@@ -236,13 +237,13 @@ Something else is on port 8000. Either kill it (`lsof -ti:8000 | xargs kill`) or
 Either no bills uploaded yet, or the backend isn't running. Check the **Upload** tab works, or run `python seed_demo.py` to load three sample bills.
 
 **Amber "OCR couldn't read this invoice" warning**
-The local Tesseract parser couldn't extract enough data — typically means the invoice is non-Estonian, has an unusual layout, or is a low-quality scan. Switch the **Extraction method** toggle on the Upload tab to **🤖 AI (OpenRouter)** and re-upload — no restart needed. Requires `OPENROUTER_API_KEY` to be set (free key at https://openrouter.ai/keys).
+The local Tesseract parser couldn't extract enough data — typically means the invoice is non-Estonian, has an unusual layout, or is a low-quality scan. Switch the **Extraction method** toggle on the Upload tab to **🤖 AI (FreeLLMAPI)** and re-upload. FreeLLMAPI still relies on local OCR text first, so very poor scans may need a better source file.
 
 **Amber "File saved, but data couldn't be extracted" after AI upload**
-The selected OpenRouter model failed (rate-limited, delisted from the free tier, or returned a non-JSON response). The error text in the banner tells you which. Pick a different model from the dropdown and try again — the backend auto-falls-back through up to 4 free models, so transient failures usually resolve on the next attempt.
+The selected FreeLLMAPI model failed, no provider keys are healthy, or the model returned a non-JSON response. The error text in the banner tells you which. Open the FreeLLMAPI dashboard, check provider key health/fallback order, or pick a different model from the dropdown and try again.
 
-**`RuntimeError: OPENROUTER_API_KEY must be set for the openrouter parser`**
-The backend can't see your OpenRouter key. For local dev, copy `backend/.env.example` to `backend/.env` and fill in `OPENROUTER_API_KEY=sk-or-v1-...` — then restart `uvicorn`. For deployed instances, add the env var in Render's dashboard and wait for the automatic redeploy.
+**`FreeLLMAPI request failed`**
+The utility backend can reach FreeLLMAPI but the proxy rejected or could not route the request. Confirm FreeLLMAPI is running, provider keys are configured, and `FREELLMAPI_API_KEY` matches your unified key if you enforce auth.
 
 ## Parser accuracy
 
@@ -257,7 +258,7 @@ Tested on real Tallinn korteriühistu invoices:
 
 Native-text PDFs give **high confidence** (pdfplumber, 100% character accuracy).
 Scanned PDFs and images give **medium confidence** (Tesseract OCR, occasional accent drops).
-For non-Estonian or non-standard invoices, switch to the **AI (OpenRouter)** backend — free vision models typically match Claude's accuracy on invoices they're given.
+For non-Estonian or non-standard invoices, switch to the **AI (FreeLLMAPI)** backend. It uses the same local text extraction first, then asks your routed free LLM providers to structure the data.
 
 ## Dashboard sections
 
@@ -293,7 +294,7 @@ Glossary (`backend/translation.py`) includes:
 backend/
 ├── main.py              FastAPI app, SQLite schema, analytics endpoint
 ├── parser.py            Tesseract OCR + pdfplumber + regex + column detector
-├── parser_openrouter.py OpenRouter client + auto-fallback chain across free vision models
+├── parser_freellmapi.py FreeLLMAPI client for text-to-JSON extraction
 ├── auth.py              Shared-password login (HMAC-signed tokens, stdlib only)
 ├── translation.py       180-term Estonian→English glossary + period parser
 ├── seed_demo.py         Seed 3 sample bills without any API call

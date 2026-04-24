@@ -1,4 +1,14 @@
 services:
+  freellmapi:
+    build: ../freellmapi
+    ports:
+      - "3001:3001"
+    environment:
+      PORT: 3001
+      ENCRYPTION_KEY: ${FREELLMAPI_ENCRYPTION_KEY:-}
+    volumes:
+      - freellmapi-data:/app/server/data
+
   backend:
     build: ./backend
     ports:
@@ -6,12 +16,17 @@ services:
     environment:
       PARSER_BACKEND: ${PARSER_BACKEND:-tesseract}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      FREELLMAPI_BASE_URL: ${FREELLMAPI_BASE_URL:-http://freellmapi:3001}
+      FREELLMAPI_API_KEY: ${FREELLMAPI_API_KEY:-}
+      FREELLMAPI_MODEL: ${FREELLMAPI_MODEL:-auto}
       MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-20971520}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       DB_PATH: /data/bills.db
       UPLOADS_DIR: /data/uploads
     volumes:
       - backend-data:/data
+    depends_on:
+      - freellmapi
 
   frontend:
     build:
@@ -25,3 +40,4 @@ services:
 
 volumes:
   backend-data:
+  freellmapi-data:

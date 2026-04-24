@@ -20,7 +20,7 @@ interface UploadTabProps {
 }
 
 type ItemStatus = "pending" | "uploading" | "success" | "replaced" | "error" | "low_quality" | "too_large";
-type ParserMode = "tesseract" | "openrouter";
+type ParserMode = "tesseract" | "freellmapi";
 
 interface QueueItem {
   id: string;
@@ -31,7 +31,7 @@ interface QueueItem {
 }
 
 const FALLBACK_MODELS = [
-  { id: "google/gemini-2.0-flash-exp:free", label: "Gemini 2.0 Flash" },
+  { id: "auto", label: "Auto (FreeLLMAPI router)" },
   { id: "__custom__", label: "Custom model ID…" },
 ];
 
@@ -45,7 +45,7 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
   const [dragging, setDragging] = useState(false);
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [running, setRunning] = useState(false);
-  const [parserMode, setParserMode] = useState<ParserMode>("openrouter");
+  const [parserMode, setParserMode] = useState<ParserMode>("freellmapi");
   const [availableModels, setAvailableModels] = useState(FALLBACK_MODELS);
   const [selectedModel, setSelectedModel] = useState(FALLBACK_MODELS[0].id);
   const [customModel, setCustomModel] = useState("");
@@ -54,7 +54,7 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
 
   useEffect(() => {
     let cancelled = false;
-    api.getOpenRouterModels()
+    api.getFreeLlmModels()
       .then(res => {
         if (cancelled) return;
         const live = res.data.models || [];
@@ -78,7 +78,7 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
   const processQueue = useCallback(async (items: QueueItem[]) => {
     setRunning(true);
     const effectiveModel =
-      parserMode === "openrouter"
+      parserMode === "freellmapi"
         ? (selectedModel === "__custom__" ? customModel.trim() : selectedModel)
         : undefined;
 
@@ -186,9 +186,9 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
         <div style={{ fontSize: 11, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 10, fontWeight: 600 }}>
           Extraction method
         </div>
-        <div style={{ display: "flex", gap: 8, marginBottom: parserMode === "openrouter" ? 12 : 0 }}>
+        <div style={{ display: "flex", gap: 8, marginBottom: parserMode === "freellmapi" ? 12 : 0 }}>
           {([
-            { id: "openrouter", label: "🤖 AI (OpenRouter)", desc: "Free vision models — any invoice, any language" },
+            { id: "freellmapi", label: "🤖 AI (FreeLLMAPI)", desc: "Local OCR + routed free LLM extraction" },
             { id: "tesseract", label: "🔍 Local OCR", desc: "Offline, no API key — best for standard layouts" },
           ] as { id: ParserMode; label: string; desc: string }[]).map(({ id, label, desc }) => (
             <button
@@ -212,7 +212,7 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
           ))}
         </div>
 
-        {parserMode === "openrouter" && (
+        {parserMode === "freellmapi" && (
           <div>
             <label style={{ fontSize: 12, color: "#9ca3af", display: "block", marginBottom: 4 }}>
               Model {modelsLoading ? "(loading live list…)" : `(${availableModels.length - 1} available)`}
@@ -242,7 +242,7 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
                 type="text"
                 value={customModel}
                 onChange={(e) => setCustomModel(e.target.value)}
-                placeholder="e.g. mistralai/pixtral-12b:free"
+                placeholder="e.g. gemini-2.5-flash"
                 disabled={running}
                 style={{
                   width: "100%",
@@ -258,9 +258,9 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
               />
             )}
             <div style={{ fontSize: 11, color: "#6b7280", marginTop: 6 }}>
-              Browse all free models at{" "}
-              <a href="https://openrouter.ai/models?max_price=0&input_modalities=image" target="_blank" rel="noreferrer" style={{ color: "#93c5fd" }}>
-                openrouter.ai/models
+              Manage provider keys and fallback order in the FreeLLMAPI dashboard at{" "}
+              <a href="http://localhost:3001" target="_blank" rel="noreferrer" style={{ color: "#93c5fd" }}>
+                localhost:3001
               </a>
             </div>
           </div>
@@ -374,16 +374,16 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
               </div>
             ) : null}
             <div style={{ color: "#d1d5db", fontSize: 13, lineHeight: 1.5 }}>
-              {parserMode === "openrouter" ? (
+              {parserMode === "freellmapi" ? (
                 <>
-                  Try a different model from the dropdown — the selected one may have been
-                  delisted from OpenRouter's free tier or hit a rate limit.
+                  Try a different model from the dropdown, or check that FreeLLMAPI
+                  has healthy provider keys configured.
                 </>
               ) : (
                 <>
                   The local OCR parser found very little data. Switch to{" "}
-                  <strong style={{ color: "#93c5fd" }}>AI (OpenRouter)</strong> above and
-                  re-upload for accurate extraction from any invoice format or language.
+                  <strong style={{ color: "#93c5fd" }}>AI (FreeLLMAPI)</strong> above and
+                  re-upload so FreeLLMAPI can structure the extracted text.
                 </>
               )}
             </div>
@@ -391,7 +391,7 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
         </div>
       )}
 
-      {detailItem && parsed && Array.isArray(parsed._models_tried) && parsed._models_tried.length > 0 && parsed._model_used ? (
+      {detailItem && parsed && parsed._routed_via ? (
         <div style={{
           ...cardStyle,
           marginTop: 16,
@@ -400,10 +400,10 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
           fontSize: 12,
         }}>
           <div style={{ color: "#93c5fd", fontWeight: 600, marginBottom: 4 }}>
-            Auto-fallback used: succeeded with <code>{String(parsed._model_used)}</code>
+            FreeLLMAPI routed this request via <code>{String(parsed._routed_via)}</code>
           </div>
           <div style={{ color: "#6b7280" }}>
-            Previous attempts: {(parsed._models_tried as string[]).join(" · ")}
+            Requested model: <code>{String(parsed._model_used ?? "auto")}</code>
           </div>
         </div>
       ) : null}
@@ -493,7 +493,7 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
         <h3 style={{ color: "white", margin: "0 0 4px", fontSize: 14 }}>Supported Invoice Types</h3>
         <p style={{ color: "#6b7280", fontSize: 12, margin: "0 0 12px" }}>
           Local OCR works best with standard-layout PDF invoices.
-          AI (OpenRouter) handles any format, language, or layout using free vision models.
+          AI (FreeLLMAPI) uses local OCR first, then routes text extraction through your free LLM providers.
         </p>
 
         <div style={{ marginBottom: 10 }}>
@@ -511,7 +511,7 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
 
         <div>
           <div style={{ fontSize: 11, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>
-            Any invoice (AI / OpenRouter)
+            Any invoice (AI / FreeLLMAPI)
           </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
             {["Rent", "Subscriptions", "Services", "Repairs", "Insurance", "Any format or language"].map(p => (
