@@ -21,6 +21,7 @@ export interface Bill {
 }
 
 export interface AnalyticsSummary {
+  totals: BillTotals;
   by_type: TypeStat[];
   by_month: MonthTypeStat[];
   by_year: YearStat[];
@@ -28,6 +29,14 @@ export interface AnalyticsSummary {
   by_provider: ProviderStat[];
   monthly_total: MonthlyTotal[];
   line_item_trends: LineItemTrend[];
+}
+
+export interface BillTotals {
+  bill_count: number;
+  total_eur: number;
+  avg_eur: number;
+  min_eur: number;
+  max_eur: number;
 }
 
 export interface LineItemTrend {

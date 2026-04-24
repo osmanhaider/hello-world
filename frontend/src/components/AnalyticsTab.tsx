@@ -157,7 +157,7 @@ export default function AnalyticsTab() {
     </div>
   );
 
-  const totalSpend = data.by_type.reduce((s, t) => s + t.total_eur, 0);
+  const totalSpend = data.totals.total_eur;
   const latestMonth = data.monthly_total[data.monthly_total.length - 1];
   const prevMonth = data.monthly_total[data.monthly_total.length - 2];
   const momChange = latestMonth.mom_delta_pct ?? (prevMonth ? ((latestMonth.total_eur - prevMonth.total_eur) / prevMonth.total_eur * 100) : null);
@@ -277,7 +277,7 @@ export default function AnalyticsTab() {
         <div>
           <h2 style={{ color: "white", margin: 0, fontSize: 22 }}>Analytics Dashboard</h2>
           <p style={{ color: "#9ca3af", margin: "4px 0 0", fontSize: 13 }}>
-            {data.by_type.reduce((s, t) => s + t.bill_count, 0)} bills · {types.length} utility types
+            {data.totals.bill_count} bills · {types.length} utility types
           </p>
         </div>
         <button
@@ -334,7 +334,7 @@ export default function AnalyticsTab() {
           />
         )}
         <StatCard label="3-Month Avg" value={`€${latestMonth.rolling_avg_3m.toFixed(2)}`} sub="rolling average" />
-        <StatCard label="Highest Single Bill" value={`€${Math.max(...data.by_type.map(t => t.max_eur)).toFixed(2)}`} />
+        <StatCard label="Highest Single Bill" value={`€${data.totals.max_eur.toFixed(2)}`} />
         <StatCard label="Monthly Avg (all time)" value={`€${(totalSpend / Math.max(data.monthly_total.length, 1)).toFixed(2)}`} />
         {data.by_type.find(t => t.total_kwh) && (
           <StatCard label="Total Electricity" value={`${data.by_type.find(t => t.total_kwh)!.total_kwh!.toFixed(0)} kWh`} />
