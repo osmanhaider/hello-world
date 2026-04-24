@@ -10,6 +10,7 @@ from fastapi import FastAPI, File, UploadFile, HTTPException, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from translation import enrich_parsed
 
 DB_PATH = "bills.db"
 UPLOADS_DIR = "uploads"
@@ -81,52 +82,42 @@ def parse_bill_with_claude(file_path: str) -> dict:
     client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
     data, media_type = encode_image(file_path)
 
-    prompt = """You are an expert at extracting information from Estonian utility bills (electricity, gas, water, heating, internet, etc.).
+    prompt = """You are an expert at reading Estonian utility bills (electricity, gas, water, heating, internet, etc.).
 
-The bill is likely in Estonian. Extract information AND translate all Estonian text into English.
-
-Return ONLY a valid JSON object with these fields:
+Extract structured data from this bill image. Return ONLY a valid JSON object:
 {
-  "provider": "company name (e.g. Eesti Energia, Elering, Tallinna Vesi, Gasum, Telia, etc.)",
+  "provider": "company name (e.g. Eesti Energia, Elektrilevi, Tallinna Vesi, Gasum, Telia)",
   "utility_type": "one of: electricity, gas, water, heating, internet, waste, other",
-  "amount_eur": numeric amount in euros (just the number, e.g. 45.23),
-  "consumption_kwh": numeric kWh consumption if electricity/heating (null if not applicable),
-  "consumption_m3": numeric m3 consumption if gas/water (null if not applicable),
-  "bill_date": "YYYY-MM-DD format of the invoice/bill date",
-  "period_start": "YYYY-MM-DD format of billing period start",
-  "period_end": "YYYY-MM-DD format of billing period end",
-  "account_number": "customer/account number if visible",
-  "address": "service address if visible",
-  "vat_amount": numeric VAT amount in euros if shown,
-  "amount_without_vat": numeric amount excluding VAT if shown,
-  "meter_reading_start": numeric start meter reading if shown,
-  "meter_reading_end": numeric end meter reading if shown,
-  "due_date": "YYYY-MM-DD format of payment due date",
-  "translated_summary": "A concise 2-3 sentence English summary of what this bill is for, the period, and any notable context (price changes, reminders, promotions, late fees, etc.)",
+  "amount_eur": numeric total amount due in euros (e.g. 45.23),
+  "consumption_kwh": numeric kWh if electricity/heating bill (null otherwise),
+  "consumption_m3": numeric m3 if gas/water bill (null otherwise),
+  "bill_date": "YYYY-MM-DD invoice date",
+  "period_start": "YYYY-MM-DD billing period start",
+  "period_end": "YYYY-MM-DD billing period end",
+  "account_number": "customer or account number",
+  "address": "service address",
+  "vat_amount": numeric VAT in euros,
+  "amount_without_vat": numeric amount excluding VAT,
+  "meter_reading_start": numeric opening meter reading,
+  "meter_reading_end": numeric closing meter reading,
+  "due_date": "YYYY-MM-DD payment due date",
   "line_items": [
     {
-      "description_et": "original Estonian line item description (e.g. 'Elektrienergia', 'Võrgutasu', 'Aktsiis', 'Taastuvenergia tasu')",
-      "description_en": "English translation (e.g. 'Electricity', 'Grid fee', 'Excise duty', 'Renewable energy fee')",
-      "amount_eur": numeric amount in euros for this line (can be null),
-      "quantity": numeric quantity if shown (can be null),
-      "unit": "unit like kWh, m3, pcs (can be null)"
+      "description_et": "Estonian line item text exactly as printed (e.g. 'Elektrienergia', 'Võrgutasu', 'Aktsiis')",
+      "amount_eur": numeric amount for this line,
+      "quantity": numeric quantity,
+      "unit": "kWh / m3 / pcs / etc."
     }
   ],
-  "glossary": {
-    "estonian_term": "english translation"
-  },
-  "confidence": "high/medium/low based on image quality and clarity"
+  "confidence": "high/medium/low"
 }
 
-For "line_items", include every charge/line visible on the bill (energy, grid fees, taxes, excise, renewable fees, fixed fees, VAT, discounts).
-For "glossary", include 5-10 of the most important Estonian terms from the bill with their English translations so a non-Estonian speaker understands the document.
-
-If a field cannot be determined, use null. Return only the JSON, no explanation."""
+List every charge line visible. Use null for any field you cannot read. Return only the JSON."""
 
     if media_type == "application/pdf":
         message = client.messages.create(
             model="claude-sonnet-4-6",
-            max_tokens=2048,
+            max_tokens=1024,
             messages=[{
                 "role": "user",
                 "content": [
@@ -137,7 +128,7 @@ If a field cannot be determined, use null. Return only the JSON, no explanation.
     else:
         message = client.messages.create(
             model="claude-sonnet-4-6",
-            max_tokens=2048,
+            max_tokens=1024,
             messages=[{
                 "role": "user",
                 "content": [
@@ -173,6 +164,7 @@ async def upload_bill(file: UploadFile = File(...)):
 
     try:
         parsed = parse_bill_with_claude(save_path)
+        parsed = enrich_parsed(parsed)  # add translations locally — no extra API call
     except Exception as e:
         parsed = {"error": str(e)}
 

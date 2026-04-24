@@ -1,0 +1,318 @@
+"""
+Hardcoded Estonian → English translation for utility bills.
+No API calls — pure dictionary + template logic.
+"""
+
+from __future__ import annotations
+from typing import Optional
+
+# ---------------------------------------------------------------------------
+# Core glossary: Estonian term → English translation
+# Keys are lowercase for case-insensitive matching.
+# ---------------------------------------------------------------------------
+GLOSSARY: dict[str, str] = {
+    # Energy / electricity
+    "elektrienergia": "Electricity",
+    "elekter": "Electricity",
+    "elektrieneregia": "Electricity",
+    "võrguteenus": "Grid service",
+    "võrgutasu": "Grid fee",
+    "jaotusvõrguteenus": "Distribution network service",
+    "jaotusvõrk": "Distribution network",
+    "ülekandevõrk": "Transmission network",
+    "põhivõrk": "Main grid",
+    "aktsiis": "Excise duty",
+    "elektriaktsiis": "Electricity excise duty",
+    "taastuvenergia tasu": "Renewable energy fee",
+    "taastuvenergia": "Renewable energy",
+    "energiatõhususe tasu": "Energy efficiency fee",
+    "energiatõhusus": "Energy efficiency",
+    "universaalteenuse tasu": "Universal service fee",
+    "võimsustasu": "Capacity fee",
+    "võimsusmakse": "Capacity charge",
+    "liitumistasu": "Connection fee",
+    "püsitasu": "Fixed fee",
+    "põhitariif": "Base tariff",
+    "ületarbimistasu": "Excess consumption fee",
+    "öötariif": "Night tariff",
+    "päevane tariff": "Day tariff",
+    "öine tariff": "Night tariff",
+    "tippkoormus": "Peak load",
+    "madalkoormus": "Off-peak load",
+    "koormusjuhtimine": "Load management",
+    "bilansienergia": "Balancing energy",
+    "reaktiivenergia": "Reactive energy",
+
+    # Gas
+    "maagaas": "Natural gas",
+    "gaas": "Gas",
+    "gaasivõrguteenus": "Gas network service",
+    "gaasimüük": "Gas sales",
+    "gaasienergia": "Gas energy",
+    "gaasi transport": "Gas transport",
+
+    # Water
+    "külm vesi": "Cold water",
+    "soe vesi": "Hot water",
+    "vesi": "Water",
+    "kanalisatsioon": "Sewerage / Wastewater",
+    "ühisveevärk": "Public water supply",
+    "äravool": "Drainage",
+    "reovesi": "Wastewater",
+    "sademevesi": "Stormwater",
+
+    # Heating / district heating
+    "kaugküte": "District heating",
+    "soojusenergia": "Thermal energy",
+    "soojus": "Heat",
+    "soojusvõrk": "Heat network",
+    "küttesüsteem": "Heating system",
+    "soojavesi": "Hot water",
+
+    # Internet / telecom
+    "internetiteenus": "Internet service",
+    "lairiba": "Broadband",
+    "televisioon": "Television",
+    "kaabeltelevisoon": "Cable TV",
+    "telefoniteenus": "Phone service",
+    "mobiilside": "Mobile service",
+    "datapakett": "Data package",
+
+    # Waste
+    "jäätmevedu": "Waste collection",
+    "jäätmekäitlus": "Waste management",
+    "olmejäätmed": "Household waste",
+    "prügivedamine": "Rubbish collection",
+    "sorteeritud jäätmed": "Sorted / Recycled waste",
+    "biojäätmed": "Bio waste",
+    "pakend": "Packaging waste",
+
+    # Bill / invoice structure
+    "arve": "Invoice",
+    "arve number": "Invoice number",
+    "arve kuupäev": "Invoice date",
+    "tasumise tähtaeg": "Payment due date",
+    "maksetähtaeg": "Payment due date",
+    "periood": "Period",
+    "arvestusperiood": "Billing period",
+    "arveldusperiood": "Billing period",
+    "kogus": "Quantity",
+    "ühik": "Unit",
+    "ühikuhind": "Unit price",
+    "hind": "Price",
+    "summa": "Amount",
+    "kokku": "Total",
+    "käibemaks": "VAT (Value Added Tax)",
+    "km": "VAT",
+    "käibemaksumäär": "VAT rate",
+    "käibemaksusumma": "VAT amount",
+    "summa ilma käibemaksuta": "Amount excl. VAT",
+    "summa käibemaksuga": "Amount incl. VAT",
+    "soodustus": "Discount",
+    "allahindlus": "Discount",
+    "viivis": "Late payment interest",
+    "viivistasu": "Late payment fee",
+    "meeldetuletus": "Reminder",
+    "ettemaks": "Prepayment",
+    "ettemaksu jääk": "Prepayment balance",
+    "jääk": "Balance",
+    "saldo": "Balance",
+    "makstud": "Paid",
+    "tasuda": "Amount due",
+    "eelmise perioodi võlg": "Previous period debt",
+    "laekumata arved": "Outstanding invoices",
+    "krediit": "Credit",
+    "intress": "Interest",
+
+    # Meter / readings
+    "mõõdik": "Meter",
+    "mõõturi näit": "Meter reading",
+    "näit": "Reading",
+    "algnäit": "Opening reading",
+    "lõppnäit": "Closing reading",
+    "tarbimine": "Consumption",
+    "mõõtmine": "Measurement",
+    "mõõtepunkt": "Metering point",
+    "eic kood": "EIC code (meter ID)",
+
+    # Customer / contract
+    "klient": "Customer",
+    "kliendi number": "Customer number",
+    "konto number": "Account number",
+    "lepingu number": "Contract number",
+    "leping": "Contract",
+    "müüja": "Supplier",
+    "ostja": "Customer / Buyer",
+    "tarbija": "Consumer",
+    "omanik": "Owner",
+    "aadress": "Address",
+    "teeninduskoht": "Service address",
+    "käibemaksukohustuslase number": "VAT registration number",
+    "registreerimisnumber": "Registration number",
+    "reg nr": "Reg. no.",
+
+    # Common units
+    "kwh": "kWh",
+    "mwh": "MWh",
+    "m³": "m³",
+    "m3": "m³",
+    "gj": "GJ",
+    "mj": "MJ",
+    "tk": "pcs",
+    "kuud": "months",
+    "päevad": "days",
+    "tund": "hour",
+    "mw": "MW",
+    "kw": "kW",
+}
+
+# Common Estonian providers with a short English description
+PROVIDERS: dict[str, str] = {
+    "eesti energia": "Eesti Energia (Estonian electricity & gas supplier)",
+    "elektrilevi": "Elektrilevi (Estonian distribution network operator)",
+    "elering": "Elering (Estonian transmission system operator)",
+    "eesti gaas": "Eesti Gaas (Estonian gas supplier)",
+    "gasum": "Gasum (gas supplier)",
+    "tallinna vesi": "Tallinna Vesi (Tallinn water utility)",
+    "tartu veevärk": "Tartu Veevärk (Tartu water utility)",
+    "adven": "Adven (district heating)",
+    "utilitas": "Utilitas (district heating)",
+    "gren": "Gren (district heating)",
+    "telia": "Telia (telecom: internet, TV, phone)",
+    "elisa": "Elisa (telecom: internet, TV, phone)",
+    "tele2": "Tele2 (mobile & internet)",
+    "starman": "Starman (cable TV & internet)",
+    "sts": "STS (waste management)",
+    "ragn-sells": "Ragn-Sells (waste collection & recycling)",
+    "eesti keskkonnateenused": "Estonian Environmental Services (waste)",
+}
+
+# Utility type labels
+UTILITY_LABELS: dict[str, str] = {
+    "electricity": "electricity",
+    "gas": "gas",
+    "water": "water",
+    "heating": "district heating",
+    "internet": "internet / telecom",
+    "waste": "waste collection",
+    "other": "utility",
+}
+
+
+def translate_term(term: str) -> str:
+    """Look up an Estonian term and return its English translation.
+    Falls back to title-casing the original if not found."""
+    key = term.strip().lower()
+    if key in GLOSSARY:
+        return GLOSSARY[key]
+    # Try partial match: find longest matching key that is a substring
+    best = ""
+    best_val = ""
+    for k, v in GLOSSARY.items():
+        if k in key and len(k) > len(best):
+            best, best_val = k, v
+    return best_val if best_val else term.strip().title()
+
+
+def translate_line_items(raw_items: list[dict]) -> list[dict]:
+    """
+    Add description_en to each line item using the hardcoded glossary.
+    Expects items with at least description_et (or description).
+    """
+    result = []
+    for item in raw_items:
+        et = str(item.get("description_et") or item.get("description") or "").strip()
+        en = translate_term(et) if et else ""
+        result.append({**item, "description_et": et, "description_en": en})
+    return result
+
+
+def build_glossary(line_items: list[dict], extra_terms: list[str] | None = None) -> dict[str, str]:
+    """
+    Build a glossary dict from the line items that appear in this bill,
+    plus any extra Estonian terms found in the raw text.
+    """
+    seen = {}
+    for item in line_items:
+        et = str(item.get("description_et") or "").strip()
+        if et:
+            en = translate_term(et)
+            if en.lower() != et.lower():  # only include when we have a real translation
+                seen[et] = en
+    if extra_terms:
+        for t in extra_terms:
+            t = t.strip()
+            if t:
+                en = translate_term(t)
+                if en.lower() != t.lower():
+                    seen[t] = en
+    return seen
+
+
+def generate_summary(parsed: dict) -> str:
+    """
+    Build a plain-English summary sentence from structured bill fields.
+    No AI needed — purely template-based.
+    """
+    provider = parsed.get("provider") or "Unknown provider"
+    utype = UTILITY_LABELS.get(parsed.get("utility_type") or "", "utility")
+    amount = parsed.get("amount_eur")
+    period_start = parsed.get("period_start")
+    period_end = parsed.get("period_end")
+    bill_date = parsed.get("bill_date")
+    consumption_kwh = parsed.get("consumption_kwh")
+    consumption_m3 = parsed.get("consumption_m3")
+    due_date = parsed.get("due_date")
+
+    parts: list[str] = []
+
+    # Core sentence
+    amount_str = f"€{amount:.2f}" if amount is not None else "an unknown amount"
+    if period_start and period_end:
+        parts.append(f"{provider} charged {amount_str} for {utype} covering {period_start} to {period_end}.")
+    elif bill_date:
+        parts.append(f"{provider} issued a {utype} bill for {amount_str} on {bill_date}.")
+    else:
+        parts.append(f"{provider} issued a {utype} bill for {amount_str}.")
+
+    # Consumption detail
+    if consumption_kwh is not None:
+        parts.append(f"Total consumption was {consumption_kwh:g} kWh.")
+    elif consumption_m3 is not None:
+        parts.append(f"Total consumption was {consumption_m3:g} m³.")
+
+    # Due date
+    if due_date:
+        parts.append(f"Payment is due by {due_date}.")
+
+    return " ".join(parts)
+
+
+def enrich_parsed(parsed: dict) -> dict:
+    """
+    Take the raw dict from Claude (extraction only) and add all
+    translation fields without any API call.
+    """
+    # Translate line items
+    raw_items = parsed.get("line_items") or []
+    translated_items = translate_line_items(raw_items)
+
+    # Build glossary from those items
+    glossary = build_glossary(translated_items)
+
+    # Add provider description if we recognise the provider
+    provider_raw = (parsed.get("provider") or "").lower()
+    for key, desc in PROVIDERS.items():
+        if key in provider_raw:
+            glossary[parsed["provider"]] = desc
+            break
+
+    # Generate English summary
+    summary = generate_summary(parsed)
+
+    return {
+        **parsed,
+        "line_items": translated_items,
+        "glossary": glossary,
+        "translated_summary": summary,
+    }
