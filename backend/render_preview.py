@@ -36,11 +36,11 @@ maxm = max(r["total_eur"] for r in mt)
 
 print("\n🎯 KPI CARDS (top row)")
 print("┌──────────────────┬──────────────────┬──────────────────┬──────────────────┐")
-print(f"│ TOTAL SPEND      │ LATEST MONTH     │ YoY CHANGE       │ 3-MONTH AVG      │")
+print("│ TOTAL SPEND      │ LATEST MONTH     │ YoY CHANGE       │ 3-MONTH AVG      │")
 print(f"│ €{total:>7.2f}         │ €{latest['total_eur']:>7.2f}         │ (no prior year)  │ €{latest['rolling_avg_3m']:>7.2f}         │")
 print(f"│                  │ ↓ {abs(latest['mom_delta_pct']):.1f}% MoM       │                  │ rolling          │")
 print("├──────────────────┼──────────────────┼──────────────────┼──────────────────┤")
-print(f"│ HIGHEST BILL     │ MONTHLY AVG      │ TOTAL ELEC.      │                  │")
+print("│ HIGHEST BILL     │ MONTHLY AVG      │ TOTAL ELEC.      │                  │")
 print(f"│ €{maxm:>7.2f}         │ €{total/len(mt):>7.2f}         │ {d['by_type'][0]['total_kwh']:.0f} kWh          │                  │")
 print("└──────────────────┴──────────────────┴──────────────────┴──────────────────┘")
 
@@ -71,6 +71,7 @@ print("─" * W)
 lit = d["line_item_trends"]
 # Find price-varying items
 from collections import defaultdict
+
 prices = defaultdict(dict)
 for r in lit:
     if r["unit_price"] is None:

@@ -4,7 +4,6 @@ No API calls — pure dictionary + template logic.
 """
 
 from __future__ import annotations
-from typing import Optional
 
 # ---------------------------------------------------------------------------
 # Estonian months (lowercase keys so matching is case-insensitive)
@@ -413,7 +412,7 @@ def classify_line_item(description_et: str) -> str:
     return "other"
 
 
-def translate_month_name(text: str) -> Optional[str]:
+def translate_month_name(text: str) -> str | None:
     """Return the English name of an Estonian month word, or None."""
     key = text.strip().lower()
     if key in MONTHS:
@@ -423,7 +422,7 @@ def translate_month_name(text: str) -> Optional[str]:
     return None
 
 
-def month_number(text: str) -> Optional[int]:
+def month_number(text: str) -> int | None:
     """Return the month number 1-12 for an Estonian month name."""
     key = text.strip().lower()
     if key in MONTHS:
@@ -456,7 +455,7 @@ def translate_period(text: str) -> str:
     return _PERIOD_PATTERN.sub(_sub, text)
 
 
-def translate_weekday(text: str) -> Optional[str]:
+def translate_weekday(text: str) -> str | None:
     """Return the English weekday for an Estonian weekday name, or None."""
     return WEEKDAYS.get(text.strip().lower())
 

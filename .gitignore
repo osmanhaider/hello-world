@@ -1,6 +1,8 @@
 backend/venv/
 backend/uploads/
 backend/bills.db
+backend/.pytest_cache/
+backend/.ruff_cache/
 frontend/node_modules/
 frontend/dist/
 *.pyc

@@ -2,11 +2,11 @@
 Seed the DB with the three Tehnika TN 22 korteriühistu bills
 so the dashboard can be previewed without any API calls.
 """
-import asyncio
 import json
 import sqlite3
 import uuid
 from datetime import datetime
+
 from translation import enrich_parsed
 
 DB_PATH = "bills.db"

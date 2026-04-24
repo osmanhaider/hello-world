@@ -1,37 +1,48 @@
-import os
-import json
 import base64
+import json
+import logging
+import os
 import uuid
-from datetime import datetime, date
-from typing import Optional
+from contextlib import asynccontextmanager
+from datetime import datetime, timezone
+
 import aiosqlite
-import anthropic
-from fastapi import FastAPI, File, UploadFile, HTTPException, Form
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-from translation import enrich_parsed, classify_line_item
+
 from parser import parse_bill as parse_bill_tesseract
+from translation import classify_line_item, enrich_parsed
+
+logger = logging.getLogger("utility_tracker")
+logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"))
 
 # Parser backend: "tesseract" (default, no API key) or "claude" (uses Anthropic API)
 PARSER_BACKEND = os.environ.get("PARSER_BACKEND", "tesseract").lower()
 
-DB_PATH = "bills.db"
-UPLOADS_DIR = "uploads"
+DB_PATH = os.environ.get("DB_PATH", "bills.db")
+UPLOADS_DIR = os.environ.get("UPLOADS_DIR", "uploads")
 os.makedirs(UPLOADS_DIR, exist_ok=True)
 
-app = FastAPI(title="Estonia Utility Bill Tracker")
+# Hard cap on upload size — protects against memory exhaustion from huge files.
+MAX_UPLOAD_BYTES = int(os.environ.get("MAX_UPLOAD_BYTES", 20 * 1024 * 1024))  # 20 MB
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:4173"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# Allowed filename extensions (lowercased). The MIME check below is the
+# primary gate; this second check rejects mismatched / hostile filenames.
+_ALLOWED_EXTS = {"jpg", "jpeg", "png", "gif", "webp", "pdf"}
+_ALLOWED_MIME = {
+    "image/jpeg", "image/png", "image/gif", "image/webp", "application/pdf",
+}
+
+# Only these BillUpdate fields can be written. Anything outside the set is
+# rejected even if it slips into the Pydantic model.
+_EDITABLE_BILL_COLUMNS = frozenset({
+    "provider", "utility_type", "amount_eur", "consumption_kwh",
+    "consumption_m3", "bill_date", "period_start", "period_end", "notes",
+})
 
 
-async def init_db():
+async def init_db() -> None:
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute("""
             CREATE TABLE IF NOT EXISTS bills (
@@ -55,21 +66,33 @@ async def init_db():
         await db.commit()
 
 
-@app.on_event("startup")
-async def startup():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     await init_db()
+    yield
+
+
+app = FastAPI(title="Estonia Utility Bill Tracker", lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://localhost:4173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 class BillUpdate(BaseModel):
-    provider: Optional[str] = None
-    utility_type: Optional[str] = None
-    amount_eur: Optional[float] = None
-    consumption_kwh: Optional[float] = None
-    consumption_m3: Optional[float] = None
-    bill_date: Optional[str] = None
-    period_start: Optional[str] = None
-    period_end: Optional[str] = None
-    notes: Optional[str] = None
+    provider: str | None = None
+    utility_type: str | None = None
+    amount_eur: float | None = None
+    consumption_kwh: float | None = None
+    consumption_m3: float | None = None
+    bill_date: str | None = None
+    period_start: str | None = None
+    period_end: str | None = None
+    notes: str | None = None
 
 
 def encode_image(path: str) -> tuple[str, str]:
@@ -82,8 +105,26 @@ def encode_image(path: str) -> tuple[str, str]:
     return data, media_type
 
 
+_claude_client = None
+
+
+def _get_claude_client():
+    """Return a cached Anthropic client. Imports lazily so the tesseract
+    backend doesn't require the anthropic package at runtime."""
+    global _claude_client
+    if _claude_client is None:
+        api_key = os.environ.get("ANTHROPIC_API_KEY")
+        if not api_key:
+            raise RuntimeError(
+                "PARSER_BACKEND=claude requires ANTHROPIC_API_KEY to be set."
+            )
+        import anthropic  # noqa: WPS433 — intentional lazy import
+        _claude_client = anthropic.Anthropic(api_key=api_key)
+    return _claude_client
+
+
 def parse_bill_with_claude(file_path: str) -> dict:
-    client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
+    client = _get_claude_client()
     data, media_type = encode_image(file_path)
 
     prompt = """You are an expert at reading invoices and bills of any type — utilities \
@@ -162,17 +203,33 @@ List every charge line visible. Use null for any field you cannot determine. Ret
 
 @app.post("/api/bills/upload")
 async def upload_bill(file: UploadFile = File(...)):
-    allowed = {"image/jpeg", "image/png", "image/gif", "image/webp", "application/pdf"}
-    if file.content_type not in allowed:
+    if file.content_type not in _ALLOWED_MIME:
         raise HTTPException(400, "Unsupported file type. Upload an image or PDF.")
 
-    bill_id = str(uuid.uuid4())
-    ext = file.filename.rsplit(".", 1)[-1] if "." in file.filename else "jpg"
-    save_path = os.path.join(UPLOADS_DIR, f"{bill_id}.{ext}")
+    filename = file.filename or ""
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else "jpg"
+    if ext not in _ALLOWED_EXTS:
+        raise HTTPException(400, f"Unsupported file extension: .{ext}")
 
-    contents = await file.read()
+    # Stream the upload to disk in chunks so an oversize file doesn't blow
+    # up the process, and enforce MAX_UPLOAD_BYTES as we go.
+    bill_id = str(uuid.uuid4())
+    save_path = os.path.join(UPLOADS_DIR, f"{bill_id}.{ext}")
+    total = 0
     with open(save_path, "wb") as f:
-        f.write(contents)
+        while chunk := await file.read(1024 * 1024):
+            total += len(chunk)
+            if total > MAX_UPLOAD_BYTES:
+                f.close()
+                try:
+                    os.remove(save_path)
+                except OSError:
+                    pass
+                raise HTTPException(
+                    413,
+                    f"File too large. Limit is {MAX_UPLOAD_BYTES // (1024 * 1024)} MB.",
+                )
+            f.write(chunk)
 
     try:
         if PARSER_BACKEND == "claude":
@@ -180,16 +237,21 @@ async def upload_bill(file: UploadFile = File(...)):
         else:
             parsed = parse_bill_tesseract(save_path)
         parsed = enrich_parsed(parsed)  # add translations locally — no API call
-    except Exception as e:
-        parsed = {"error": str(e), "_source": PARSER_BACKEND}
+    except Exception:
+        logger.exception("Bill parsing failed for %s (backend=%s)", filename, PARSER_BACKEND)
+        parsed = {
+            "error": "Parsing failed — see server logs for details.",
+            "_source": PARSER_BACKEND,
+            "_low_quality": True,
+        }
 
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc).isoformat()
     provider = parsed.get("provider")
     period_start = parsed.get("period_start")
     account_number = parsed.get("account_number")
 
     replaced = False
-    replaced_id: Optional[str] = None
+    replaced_id: str | None = None
 
     async with aiosqlite.connect(DB_PATH) as db:
         # 1st priority: same filename → same physical file uploaded again
@@ -316,7 +378,13 @@ async def get_bill(bill_id: str):
 
 @app.put("/api/bills/{bill_id}")
 async def update_bill(bill_id: str, update: BillUpdate):
-    fields = {k: v for k, v in update.model_dump().items() if v is not None}
+    # Filter to editable columns only. Even though BillUpdate pins the shape,
+    # the explicit allowlist prevents future field additions from silently
+    # becoming writable at the HTTP layer.
+    fields = {
+        k: v for k, v in update.model_dump().items()
+        if v is not None and k in _EDITABLE_BILL_COLUMNS
+    }
     if not fields:
         raise HTTPException(400, "No fields to update")
     set_clause = ", ".join(f"{k} = ?" for k in fields)

@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { api } from "../api";
 import { Upload, CheckCircle, AlertCircle, Loader2, RefreshCw } from "lucide-react";
 
@@ -23,6 +23,7 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
   const [status, setStatus] = useState<Status>("idle");
   const [parsed, setParsed] = useState<Record<string, unknown> | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const handleFile = useCallback(async (file: File) => {
     setStatus("uploading");
@@ -82,10 +83,10 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
           cursor: "pointer",
           transition: "all 0.15s",
         }}
-        onClick={() => document.getElementById("file-input")?.click()}
+        onClick={() => fileInputRef.current?.click()}
       >
         <input
-          id="file-input"
+          ref={fileInputRef}
           type="file"
           accept="image/*,.pdf"
           style={{ display: "none" }}

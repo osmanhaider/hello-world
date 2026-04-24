@@ -1,9 +1,9 @@
 """End-to-end test of the OCR pipeline with a synthetic Estonian bill."""
+
 from PIL import Image, ImageDraw, ImageFont
+
 from parser import parse_bill
 from translation import enrich_parsed
-import json
-import os
 
 # Generate a synthetic Estonian utility bill image that mimics the
 # Tehnika TN 22 korteriühistu invoice layout.

@@ -13,18 +13,15 @@ gracefully for other Estonian utility bills.
 """
 from __future__ import annotations
 
-import io
 import os
 import re
-from typing import Optional
 
 import pytesseract
 from PIL import Image
 
-
 # ── Helpers ────────────────────────────────────────────────────────────────
 
-def _num(s: str) -> Optional[float]:
+def _num(s: str) -> float | None:
     """Convert Estonian number format ('1 234,56' or '1.234,56' or '123.45') to float."""
     if s is None:
         return None
@@ -42,7 +39,7 @@ def _num(s: str) -> Optional[float]:
         return None
 
 
-def _est_date(s: str) -> Optional[str]:
+def _est_date(s: str) -> str | None:
     """Parse a date like 13.04.2026 or 2026-04-13 into ISO YYYY-MM-DD."""
     if not s:
         return None
@@ -214,7 +211,7 @@ def extract_line_items(boxes: list[dict]) -> list[dict]:
     """Parse the line-items table using column x-positions from Tesseract."""
     # 1. Find the header row
     header_pos: dict[str, int] = {}
-    header_top: Optional[int] = None
+    header_top: int | None = None
     for b in boxes:
         if b["text"] in _TABLE_HEADERS and b["text"] not in header_pos:
             header_pos[b["text"]] = b["left"]
@@ -316,7 +313,7 @@ def classify(provider: str, line_items: list[dict]) -> str:
 
 # ── Consumption totals ─────────────────────────────────────────────────────
 
-def totals_from_line_items(items: list[dict]) -> tuple[Optional[float], Optional[float]]:
+def totals_from_line_items(items: list[dict]) -> tuple[float | None, float | None]:
     kwh = 0.0
     m3 = 0.0
     any_kwh = any_m3 = False

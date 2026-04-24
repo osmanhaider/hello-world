@@ -180,6 +180,7 @@ export default function AnalyticsTab() {
   const [data, setData] = useState<AnalyticsSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
   const dashboardRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -189,6 +190,7 @@ export default function AnalyticsTab() {
   async function exportToPDF() {
     if (!dashboardRef.current) return;
     setExporting(true);
+    setExportError(null);
     try {
       const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
       const pageWidth = pdf.internal.pageSize.getWidth();   // 210mm
@@ -265,7 +267,7 @@ export default function AnalyticsTab() {
       pdf.save(`utility-bills-dashboard-${stamp}.pdf`);
     } catch (err) {
       console.error("Export failed:", err);
-      alert("Failed to export PDF. See console for details.");
+      setExportError(err instanceof Error ? err.message : "Unknown error — see console for details.");
     } finally {
       setExporting(false);
     }
@@ -480,6 +482,33 @@ export default function AnalyticsTab() {
           )}
         </button>
       </div>
+
+      {exportError && (
+        <div style={{
+          background: "#2a1818",
+          border: "1px solid #7f1d1d",
+          borderLeft: "3px solid #ef4444",
+          borderRadius: 8,
+          padding: "12px 16px",
+          marginBottom: 16,
+          display: "flex",
+          gap: 12,
+          alignItems: "flex-start",
+        }}>
+          <AlertCircle size={18} color="#ef4444" style={{ flexShrink: 0, marginTop: 1 }} />
+          <div style={{ flex: 1 }}>
+            <div style={{ color: "#fca5a5", fontWeight: 600, fontSize: 13, marginBottom: 2 }}>
+              PDF export failed
+            </div>
+            <div style={{ color: "#d1d5db", fontSize: 12 }}>{exportError}</div>
+          </div>
+          <button
+            onClick={() => setExportError(null)}
+            style={{ background: "transparent", border: "none", color: "#6b7280", cursor: "pointer", fontSize: 18, lineHeight: 1 }}
+            aria-label="Dismiss"
+          >×</button>
+        </div>
+      )}
 
       <div ref={dashboardRef}>
 
