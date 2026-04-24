@@ -33,10 +33,6 @@ function colorFor(t: string, i = 0) {
   return COLORS[t] ?? PALETTE[i % PALETTE.length];
 }
 
-function fmtEur(v: unknown): [string, string] {
-  return [`€${(v as number).toFixed(2)}`, ""];
-}
-
 // "2025-01" → "Jan '25"
 function fmtMonthShort(m: unknown): string {
   const s = String(m ?? "");
@@ -163,11 +159,6 @@ function ChartCard({ title, subtitle, children }: { title: string; subtitle?: st
     </div>
   );
 }
-
-const tooltipStyle = {
-  contentStyle: { background: "#1a1d27", border: "1px solid #374151", borderRadius: 8, fontSize: 13 },
-  labelStyle: { color: "#9ca3af" },
-};
 
 export default function AnalyticsTab() {
   const [data, setData] = useState<AnalyticsSummary | null>(null);
@@ -310,7 +301,7 @@ export default function AnalyticsTab() {
   const meteredLabels = Array.from(new Set(
     lit.filter(r => r.unit_price != null && r.quantity != null && r.quantity > 0).map(r => r.description_en)
   ));
-  const decompRows: { label: string; month: string; priceEffect: number; volEffect: number; total: number }[] = [];
+  const decompAll: { label: string; month: string; priceEffect: number; volEffect: number; total: number; xLabel: string }[] = [];
   for (const label of meteredLabels) {
     const series = lit.filter(r => r.description_en === label && r.unit_price != null && r.quantity != null)
                       .sort((a, b) => a.month.localeCompare(b.month));
@@ -319,9 +310,22 @@ export default function AnalyticsTab() {
       if (!prev.unit_price || !cur.unit_price || !prev.quantity || !cur.quantity) continue;
       const priceEff = parseFloat(((cur.unit_price - prev.unit_price) * prev.quantity).toFixed(2));
       const volEff   = parseFloat(((cur.quantity  - prev.quantity)  * prev.unit_price).toFixed(2));
-      decompRows.push({ label, month: cur.month, priceEffect: priceEff, volEffect: volEff, total: parseFloat((cur.amount_eur - prev.amount_eur).toFixed(2)) });
+      decompAll.push({
+        label,
+        month: cur.month,
+        priceEffect: priceEff,
+        volEffect: volEff,
+        total: parseFloat((cur.amount_eur - prev.amount_eur).toFixed(2)),
+        xLabel: `${label} · ${fmtMonthShort(cur.month)}`,
+      });
     }
   }
+  // Only show entries where at least one effect is meaningful; rank by
+  // magnitude so the most interesting bars appear first. Cap at 15.
+  const decompRows = decompAll
+    .filter(r => Math.abs(r.priceEffect) + Math.abs(r.volEffect) > 0.5)
+    .sort((a, b) => (Math.abs(b.priceEffect) + Math.abs(b.volEffect)) - (Math.abs(a.priceEffect) + Math.abs(a.volEffect)))
+    .slice(0, 15);
 
   // Month-vs-month comparison table: last two months side by side
   const [prevMonthLabel, latestMonthLabel] = liMonths.slice(-2);
@@ -457,7 +461,7 @@ export default function AnalyticsTab() {
               <CartesianGrid strokeDasharray="3 3" stroke="#2d3148" vertical={false} />
               <XAxis dataKey="month" tick={{ fill: "#94a3b8", fontSize: 11 }} tickFormatter={fmtMonthShort} interval="preserveStartEnd" minTickGap={24} />
               <YAxis tick={{ fill: "#6b7280", fontSize: 12 }} tickFormatter={v => `€${v}`} />
-              <Tooltip {...tooltipStyle} formatter={fmtEur} />
+              <Tooltip content={<RichTooltip unit="€" />} cursor={{ fill: "rgba(148,163,184,0.08)" }} />
               <Legend />
               <Line
                 type="monotone"
@@ -499,7 +503,7 @@ export default function AnalyticsTab() {
               <CartesianGrid strokeDasharray="3 3" stroke="#2d3148" vertical={false} />
               <XAxis dataKey="month" tick={{ fill: "#94a3b8", fontSize: 11 }} tickFormatter={fmtMonthShort} interval="preserveStartEnd" minTickGap={24} />
               <YAxis tick={{ fill: "#6b7280", fontSize: 12 }} tickFormatter={v => `€${v}`} />
-              <Tooltip {...tooltipStyle} formatter={fmtEur} />
+              <Tooltip content={<RichTooltip unit="€" />} cursor={{ fill: "rgba(148,163,184,0.08)" }} />
               <Legend />
               <Area type="monotone" dataKey="total_eur" stroke="#2563eb" fill="url(#totalGrad)" name="Monthly Total" strokeWidth={2} />
               <Line type="monotone" dataKey="rolling_avg_3m" stroke="#f59e0b" strokeDasharray="5 5" name="3-Month Avg" strokeWidth={2} dot={false} />
@@ -520,12 +524,7 @@ export default function AnalyticsTab() {
                     <CartesianGrid strokeDasharray="3 3" stroke="#2d3148" vertical={false} />
                     <XAxis dataKey="month" tick={{ fill: "#94a3b8", fontSize: 11 }} tickFormatter={fmtMonthShort} interval="preserveStartEnd" minTickGap={24} />
                     <YAxis tick={{ fill: "#6b7280", fontSize: 12 }} tickFormatter={v => `${v}%`} />
-                    <Tooltip
-                      {...tooltipStyle}
-                      formatter={(v, name) => name === "delta"
-                        ? [`${(v as number) > 0 ? "+" : ""}${(v as number).toFixed(1)}%`, "MoM %"]
-                        : [`€${(v as number) > 0 ? "+" : ""}${(v as number).toFixed(2)}`, "MoM €"]}
-                    />
+                    <Tooltip content={<RichTooltip unit="%" showTotal={false} maxItems={2} />} cursor={{ fill: "rgba(148,163,184,0.08)" }} />
                     <Bar dataKey="delta" name="MoM %" radius={[3, 3, 0, 0]}>
                       {momRows.map((r, i) => (
                         <Cell key={i} fill={r.delta > 0 ? "#ef4444" : "#22c55e"} />
@@ -543,12 +542,7 @@ export default function AnalyticsTab() {
                     <CartesianGrid strokeDasharray="3 3" stroke="#2d3148" vertical={false} />
                     <XAxis dataKey="month" tick={{ fill: "#94a3b8", fontSize: 11 }} tickFormatter={fmtMonthShort} interval="preserveStartEnd" minTickGap={24} />
                     <YAxis tick={{ fill: "#6b7280", fontSize: 12 }} tickFormatter={v => `${v}%`} />
-                    <Tooltip
-                      {...tooltipStyle}
-                      formatter={(v, name) => name === "delta"
-                        ? [`${(v as number) > 0 ? "+" : ""}${(v as number).toFixed(1)}%`, "YoY %"]
-                        : [`€${(v as number) > 0 ? "+" : ""}${(v as number).toFixed(2)}`, "YoY €"]}
-                    />
+                    <Tooltip content={<RichTooltip unit="%" showTotal={false} maxItems={2} />} cursor={{ fill: "rgba(148,163,184,0.08)" }} />
                     <Bar dataKey="delta" name="YoY %" radius={[3, 3, 0, 0]}>
                       {yoyRows.map((r, i) => (
                         <Cell key={i} fill={r.delta > 0 ? "#ef4444" : "#22c55e"} />
@@ -632,7 +626,7 @@ export default function AnalyticsTab() {
                   <Cell key={entry.utility_type} fill={colorFor(entry.utility_type, i)} />
                 ))}
               </Pie>
-              <Tooltip {...tooltipStyle} formatter={fmtEur} />
+              <Tooltip content={<RichTooltip unit="€" />} cursor={{ fill: "rgba(148,163,184,0.08)" }} />
             </PieChart>
           </ResponsiveContainer>
         </ChartCard>
@@ -647,7 +641,7 @@ export default function AnalyticsTab() {
               <CartesianGrid strokeDasharray="3 3" stroke="#2d3148" vertical={false} />
               <XAxis dataKey="month" tick={{ fill: "#94a3b8", fontSize: 11 }} tickFormatter={fmtMonthShort} interval="preserveStartEnd" minTickGap={24} />
               <YAxis tick={{ fill: "#6b7280", fontSize: 12 }} tickFormatter={v => `€${v}`} />
-              <Tooltip {...tooltipStyle} formatter={fmtEur} />
+              <Tooltip content={<RichTooltip unit="€" />} cursor={{ fill: "rgba(148,163,184,0.08)" }} />
               <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
               {types.map((t, i) => (
                 <Bar key={t} dataKey={t} fill={colorFor(t, i)} name={t} />
@@ -665,7 +659,7 @@ export default function AnalyticsTab() {
                 <Radar key={t} name={t} dataKey={t} stroke={colorFor(t, i)} fill={colorFor(t, i)} fillOpacity={0.15} />
               ))}
               <Legend wrapperStyle={{ fontSize: 11, paddingTop: 12 }} />
-              <Tooltip {...tooltipStyle} formatter={fmtEur} />
+              <Tooltip content={<RichTooltip unit="€" />} cursor={{ fill: "rgba(148,163,184,0.08)" }} />
             </RadarChart>
           </ResponsiveContainer>
         </ChartCard>
@@ -681,7 +675,7 @@ export default function AnalyticsTab() {
                 <CartesianGrid strokeDasharray="3 3" stroke="#2d3148" vertical={false} />
                 <XAxis dataKey="year" tick={{ fill: "#6b7280", fontSize: 12 }} />
                 <YAxis tick={{ fill: "#6b7280", fontSize: 12 }} tickFormatter={v => `€${v}`} />
-                <Tooltip {...tooltipStyle} formatter={fmtEur} />
+                <Tooltip content={<RichTooltip unit="€" />} cursor={{ fill: "rgba(148,163,184,0.08)" }} />
                 <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
                 {types.map((t, i) => (
                   <Bar key={t} dataKey={t} fill={colorFor(t, i)} name={t} />
@@ -702,7 +696,7 @@ export default function AnalyticsTab() {
                 <CartesianGrid strokeDasharray="3 3" stroke="#2d3148" horizontal={false} />
                 <XAxis type="number" tick={{ fill: "#6b7280", fontSize: 12 }} tickFormatter={v => `€${v}`} />
                 <YAxis type="category" dataKey="provider" tick={{ fill: "#9ca3af", fontSize: 12 }} width={120} />
-                <Tooltip {...tooltipStyle} formatter={fmtEur} />
+                <Tooltip content={<RichTooltip unit="€" />} cursor={{ fill: "rgba(148,163,184,0.08)" }} />
                 <Bar dataKey="total_eur" fill="#2563eb" name="Total Spend" radius={[0, 4, 4, 0]}>
                   {topProviders.map((_, i) => <Cell key={i} fill={PALETTE[i % PALETTE.length]} />)}
                 </Bar>
@@ -822,18 +816,15 @@ export default function AnalyticsTab() {
           <SectionTitle>⚖️ 11. Price vs Consumption Decomposition</SectionTitle>
           <ChartCard
             title="What drove the cost change? Price or usage?"
-            subtitle="Red = price increase effect · Blue = consumption increase effect · Values can be negative (savings)"
+            subtitle={`Top ${decompRows.length} month-over-month moves · Red = price effect · Blue = volume effect`}
           >
             <div style={{ overflowX: "auto" }}>
-              <ResponsiveContainer width={Math.max(600, decompRows.length * 80)} height={300}>
-                <BarChart data={decompRows}>
+              <ResponsiveContainer width={Math.max(600, decompRows.length * 100)} height={360}>
+                <BarChart data={decompRows} margin={{ top: 10, right: 20, left: 0, bottom: 80 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#2d3148" vertical={false} />
-                  <XAxis dataKey="label" tick={{ fill: "#6b7280", fontSize: 11 }} interval={0} angle={-20} textAnchor="end" height={56} />
-                  <YAxis tick={{ fill: "#6b7280", fontSize: 12 }} tickFormatter={v => `€${v}`} />
-                  <Tooltip
-                    {...tooltipStyle}
-                    formatter={(v: unknown, name: unknown) => [`${(v as number) >= 0 ? "+" : ""}€${(v as number).toFixed(2)}`, name as string]}
-                  />
+                  <XAxis dataKey="xLabel" tick={{ fill: "#94a3b8", fontSize: 10 }} interval={0} angle={-35} textAnchor="end" height={100} />
+                  <YAxis tick={{ fill: "#94a3b8", fontSize: 11 }} tickFormatter={v => `€${v}`} />
+                  <Tooltip content={<RichTooltip unit="€" showTotal={false} maxItems={4} />} cursor={{ fill: "rgba(148,163,184,0.08)" }} />
                   <Legend />
                   <Bar dataKey="priceEffect" name="Price effect (€)" fill="#ef4444" radius={[3, 3, 0, 0]} />
                   <Bar dataKey="volEffect" name="Volume effect (€)" fill="#2563eb" radius={[3, 3, 0, 0]} />
