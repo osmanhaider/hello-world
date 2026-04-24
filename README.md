@@ -65,7 +65,7 @@ Open **http://localhost:5173**. Uploads and the SQLite DB are persisted in a nam
 
 A free-tier cloud setup: **Vercel** for the frontend, **Render** for the backend.
 
-> ⚠️ The demo uses a **single shared password** — fine for a personal deployment but not a real multi-user product. Treat it as a personal demo, not a shared service. For a public-grade deployment, swap this for proper OAuth or Cloudflare Access.
+> ⚠️ The demo uses a **single shared password** — fine for a personal deployment but not a real multi-user product. Each successful login mints a fresh per-browser data space, so two people sharing the password get isolated bills (no cross-deletion), but anyone can still see their *own* uploads on any device they log in from. For a public-grade deployment, swap this for proper OAuth or Cloudflare Access.
 
 ### 1. Backend on Render
 
@@ -108,7 +108,7 @@ CORS_ALLOW_ORIGINS=https://bills.example.com,https://www.bills.example.com
 
 ### 4. Login
 
-Visiting the Vercel URL will show a password prompt. Enter the `APP_PASSWORD` you set on Render. The token is stored in `localStorage` and lasts 7 days (override with `TOKEN_TTL_SEC`). To rotate the password, change `APP_PASSWORD` on Render — existing tokens stay valid until they expire unless you also rotate `AUTH_SECRET` (which invalidates every token immediately).
+Visiting the Vercel URL will show a password prompt. Enter the `APP_PASSWORD` you set on Render. The token is stored in `localStorage` and lasts 7 days (override with `TOKEN_TTL_SEC`). Each successful login generates a fresh, isolated data space — uploaded bills are scoped to the logging-in browser and aren't visible to other people who log in with the same password. Logging out and back in starts a new (empty) space; the old bills stay in the database but are no longer reachable from that browser. To rotate the password, change `APP_PASSWORD` on Render — existing tokens stay valid until they expire unless you also rotate `AUTH_SECRET` (which invalidates every token immediately).
 
 For local development, leave `APP_PASSWORD` unset and the login screen is skipped entirely.
 

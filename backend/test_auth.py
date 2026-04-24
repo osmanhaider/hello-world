@@ -47,14 +47,24 @@ def test_verify_password_constant_time(monkeypatch):
 
 def test_token_roundtrip(monkeypatch):
     auth = _reload_auth(monkeypatch, password="hunter2", secret="x" * 64)
-    tok = auth.create_token()
+    tok = auth.create_token("user-abc")
     payload = auth.verify_token(tok)
     assert payload["exp"] > int(time.time())
+    assert payload["sub"] == "user-abc"
+
+
+def test_token_carries_distinct_user_ids(monkeypatch):
+    auth = _reload_auth(monkeypatch, password="hunter2", secret="x" * 64)
+    tok_a = auth.create_token("alice")
+    tok_b = auth.create_token("bob")
+    assert auth.verify_token(tok_a)["sub"] == "alice"
+    assert auth.verify_token(tok_b)["sub"] == "bob"
+    assert tok_a != tok_b
 
 
 def test_token_tampered_signature_rejected(monkeypatch):
     auth = _reload_auth(monkeypatch, password="hunter2", secret="x" * 64)
-    tok = auth.create_token()
+    tok = auth.create_token("user-abc")
     body, sig = tok.rsplit(".", 1)
     tampered = f"{body}.{'0' * len(sig)}"
     with pytest.raises(auth.AuthError):
@@ -63,7 +73,7 @@ def test_token_tampered_signature_rejected(monkeypatch):
 
 def test_token_tampered_payload_rejected(monkeypatch):
     auth = _reload_auth(monkeypatch, password="hunter2", secret="x" * 64)
-    tok = auth.create_token()
+    tok = auth.create_token("user-abc")
     body, sig = tok.rsplit(".", 1)
     # Flip the last character of the payload — signature should no longer match.
     flipped_char = "A" if body[-1] != "A" else "B"
@@ -74,7 +84,7 @@ def test_token_tampered_payload_rejected(monkeypatch):
 
 def test_token_expired(monkeypatch):
     auth = _reload_auth(monkeypatch, password="hunter2", secret="x" * 64)
-    tok = auth.create_token(ttl_sec=-1)
+    tok = auth.create_token("user-abc", ttl_sec=-1)
     with pytest.raises(auth.AuthError, match="expired"):
         auth.verify_token(tok)
 
@@ -88,12 +98,12 @@ def test_token_malformed(monkeypatch):
 def test_secret_required_for_create(monkeypatch):
     auth = _reload_auth(monkeypatch, password="hunter2")  # no secret
     with pytest.raises(auth.AuthError):
-        auth.create_token()
+        auth.create_token("user-abc")
 
 
 def test_different_secrets_produce_incompatible_tokens(monkeypatch):
     auth = _reload_auth(monkeypatch, password="hunter2", secret="secret-a" * 8)
-    tok = auth.create_token()
+    tok = auth.create_token("user-abc")
     auth2 = _reload_auth(monkeypatch, password="hunter2", secret="secret-b" * 8)
     with pytest.raises(auth2.AuthError):
         auth2.verify_token(tok)
