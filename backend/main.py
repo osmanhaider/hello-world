@@ -126,7 +126,11 @@ List every charge line visible. Use null for any field you cannot read. Return o
             messages=[{
                 "role": "user",
                 "content": [
-                    {"type": "text", "text": "This is a PDF utility bill. " + prompt}
+                    {
+                        "type": "document",
+                        "source": {"type": "base64", "media_type": "application/pdf", "data": data},
+                    },
+                    {"type": "text", "text": prompt},
                 ]
             }]
         )
