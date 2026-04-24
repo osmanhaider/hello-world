@@ -9,20 +9,25 @@ import { TrendingUp, TrendingDown, Minus, Loader2, AlertCircle, Download } from 
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 
+// McKinsey-inspired palette: one primary blue, a complementary teal/emerald,
+// warm accents for amber/orange, and red/green reserved for directional signals.
 const COLORS: Record<string, string> = {
-  electricity: "#f59e0b",
-  gas: "#f97316",
-  water: "#3b82f6",
-  heating: "#ef4444",
-  internet: "#8b5cf6",
+  electricity: "#f59e0b",   // amber
+  gas: "#f97316",           // orange
+  water: "#0ea5e9",         // sky
+  heating: "#dc2626",       // red
+  internet: "#8b5cf6",      // violet
   telecom: "#8b5cf6",
-  waste: "#6b7280",
-  management: "#14b8a6",
-  other: "#9ca3af",
+  waste: "#64748b",         // slate
+  management: "#0d9488",    // teal
+  other: "#94a3b8",         // slate-400
 };
 
 const MONTH_NAMES = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-const PALETTE = ["#2563eb", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#f97316", "#06b6d4"];
+const PALETTE = [
+  "#2563eb", "#0d9488", "#f59e0b", "#dc2626", "#8b5cf6",
+  "#0ea5e9", "#ec4899", "#14b8a6", "#f97316", "#6366f1",
+];
 
 function colorFor(t: string, i = 0) {
   return COLORS[t] ?? PALETTE[i % PALETTE.length];
@@ -30,6 +35,82 @@ function colorFor(t: string, i = 0) {
 
 function fmtEur(v: unknown): [string, string] {
   return [`€${(v as number).toFixed(2)}`, ""];
+}
+
+// "2025-01" → "Jan '25"
+function fmtMonthShort(m: unknown): string {
+  const s = String(m ?? "");
+  const match = s.match(/^(\d{4})-(\d{2})$/);
+  if (!match) return s;
+  const mo = parseInt(match[2], 10);
+  return `${MONTH_NAMES[mo]} '${match[1].slice(2)}`;
+}
+
+interface TooltipPayloadItem {
+  value: number;
+  name: string;
+  color: string;
+  dataKey: string;
+}
+
+// McKinsey-style tooltip: shows only non-zero values, ranks by magnitude,
+// caps the list at `maxItems`, and sums the tail.
+function RichTooltip({
+  active, payload, label, maxItems = 8, showTotal = true, unit = "€",
+}: {
+  active?: boolean;
+  payload?: TooltipPayloadItem[];
+  label?: string;
+  maxItems?: number;
+  showTotal?: boolean;
+  unit?: string;
+}) {
+  if (!active || !payload || payload.length === 0) return null;
+  const items = payload
+    .filter(p => typeof p.value === "number" && Math.abs(p.value) > 0.005)
+    .sort((a, b) => Math.abs(b.value) - Math.abs(a.value));
+  const shown = items.slice(0, maxItems);
+  const hidden = items.slice(maxItems);
+  const total = items.reduce((s, p) => s + p.value, 0);
+  const hiddenTotal = hidden.reduce((s, p) => s + p.value, 0);
+  const labelText = label && /^\d{4}-\d{2}$/.test(label) ? fmtMonthShort(label) : label;
+
+  const fmt = (v: number) =>
+    unit === "€" ? `€${v.toFixed(2)}` :
+    unit === "%" ? `${v > 0 ? "+" : ""}${v.toFixed(1)}%` :
+    `${v.toFixed(4)}`;
+
+  return (
+    <div style={{
+      background: "rgba(17, 24, 39, 0.96)",
+      border: "1px solid #374151", borderRadius: 8,
+      padding: "10px 14px", fontSize: 12,
+      minWidth: 180, boxShadow: "0 10px 30px rgba(0,0,0,0.4)",
+    }}>
+      {labelText && <div style={{ color: "#e5e7eb", fontWeight: 600, marginBottom: 8, fontSize: 12 }}>{labelText}</div>}
+      {shown.map((p, i) => (
+        <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3, justifyContent: "space-between" }}>
+          <span style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+            <span style={{ width: 8, height: 8, borderRadius: 2, background: p.color, flexShrink: 0 }} />
+            <span style={{ color: "#d1d5db", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 160 }}>{p.name}</span>
+          </span>
+          <span style={{ color: "#f3f4f6", fontVariantNumeric: "tabular-nums", fontWeight: 500, marginLeft: 12 }}>{fmt(p.value)}</span>
+        </div>
+      ))}
+      {hidden.length > 0 && (
+        <div style={{ display: "flex", justifyContent: "space-between", color: "#6b7280", marginTop: 4, fontSize: 11 }}>
+          <span>+{hidden.length} more</span>
+          <span style={{ fontVariantNumeric: "tabular-nums" }}>{fmt(hiddenTotal)}</span>
+        </div>
+      )}
+      {showTotal && items.length > 1 && (
+        <div style={{ display: "flex", justifyContent: "space-between", borderTop: "1px solid #374151", marginTop: 8, paddingTop: 6, color: "#e5e7eb", fontWeight: 600 }}>
+          <span>Total</span>
+          <span style={{ fontVariantNumeric: "tabular-nums" }}>{fmt(total)}</span>
+        </div>
+      )}
+    </div>
+  );
 }
 
 
@@ -224,15 +305,6 @@ export default function AnalyticsTab() {
   }
   const unitPriceRows = Object.values(unitPriceByLabel).sort((a, b) => String(a.month).localeCompare(String(b.month)));
 
-  // Line-item cost per month (for comparison bar chart)
-  const liCostByMonth: Record<string, Record<string, number | string>> = {};
-  for (const r of lit) {
-    if (!liCostByMonth[r.month]) liCostByMonth[r.month] = { month: r.month };
-    const cur = (liCostByMonth[r.month][r.description_en] as number) ?? 0;
-    liCostByMonth[r.month][r.description_en] = parseFloat((cur + r.amount_eur).toFixed(2));
-  }
-  const liCostRows = Object.values(liCostByMonth).sort((a, b) => String(a.month).localeCompare(String(b.month)));
-
   // Price vs Consumption decomposition for metered items (have a unit_price and quantity)
   // For each consecutive month pair, compute: price effect + volume effect
   const meteredLabels = Array.from(new Set(
@@ -262,12 +334,47 @@ export default function AnalyticsTab() {
     return { label, prev, curr, amtDiff, priceDiff };
   }).filter(Boolean) as { label: string; prev: typeof lit[0] | undefined; curr: typeof lit[0] | undefined; amtDiff: number; priceDiff: number | null }[];
 
-  // Pick the line items whose unit prices actually vary across months (most interesting to chart)
-  const priceVaryingLabels = liLabels.filter(label => {
-    const prices = lit.filter(r => r.description_en === label && r.unit_price != null).map(r => r.unit_price!);
-    if (prices.length < 2) return false;
-    return Math.max(...prices) - Math.min(...prices) > 0.001;
-  });
+  // Pick the line items whose unit prices actually vary across months.
+  // Rank by relative variance (range / mean) so the most "interesting" price
+  // movements surface first; cap at 8 to keep the chart readable.
+  const priceVaryingLabels = liLabels
+    .map(label => {
+      const prices = lit.filter(r => r.description_en === label && r.unit_price != null).map(r => r.unit_price!);
+      if (prices.length < 2) return null;
+      const min = Math.min(...prices), max = Math.max(...prices);
+      const mean = prices.reduce((a, b) => a + b, 0) / prices.length;
+      const range = max - min;
+      if (range < 0.001 || mean === 0) return null;
+      return { label, variance: range / mean };
+    })
+    .filter(Boolean)
+    .sort((a, b) => b!.variance - a!.variance)
+    .slice(0, 8)
+    .map(x => x!.label);
+
+  // Cap the stacked-bar line items at top 8 by total € across all months,
+  // aggregating the rest as "Other". Prevents legend + tooltip explosion.
+  const labelTotals: Record<string, number> = {};
+  for (const r of lit) {
+    labelTotals[r.description_en] = (labelTotals[r.description_en] ?? 0) + r.amount_eur;
+  }
+  const topLabels = Object.entries(labelTotals)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8)
+    .map(([l]) => l);
+  const topLabelSet = new Set(topLabels);
+  const hasOther = liLabels.some(l => !topLabelSet.has(l));
+  const liStackLabels = hasOther ? [...topLabels, "Other"] : topLabels;
+
+  // Rebuild liCostRows with capping: non-top labels are summed into "Other"
+  const liStackRows: Record<string, Record<string, number | string>> = {};
+  for (const r of lit) {
+    if (!liStackRows[r.month]) liStackRows[r.month] = { month: r.month };
+    const key = topLabelSet.has(r.description_en) ? r.description_en : "Other";
+    const cur = (liStackRows[r.month][key] as number) ?? 0;
+    liStackRows[r.month][key] = parseFloat((cur + r.amount_eur).toFixed(2));
+  }
+  const liStackData = Object.values(liStackRows).sort((a, b) => String(a.month).localeCompare(String(b.month)));
 
   const grid2 = { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))", gap: 20 };
 
@@ -347,8 +454,8 @@ export default function AnalyticsTab() {
         <ChartCard title="Total Monthly Spend — Line" subtitle="Clean line chart of monthly total with labeled points">
           <ResponsiveContainer width="100%" height={260}>
             <LineChart data={data.monthly_total} margin={{ top: 20, right: 20, left: 0, bottom: 5 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#2d3148" />
-              <XAxis dataKey="month" tick={{ fill: "#6b7280", fontSize: 12 }} />
+              <CartesianGrid strokeDasharray="3 3" stroke="#2d3148" vertical={false} />
+              <XAxis dataKey="month" tick={{ fill: "#94a3b8", fontSize: 11 }} tickFormatter={fmtMonthShort} interval="preserveStartEnd" minTickGap={24} />
               <YAxis tick={{ fill: "#6b7280", fontSize: 12 }} tickFormatter={v => `€${v}`} />
               <Tooltip {...tooltipStyle} formatter={fmtEur} />
               <Legend />
@@ -389,8 +496,8 @@ export default function AnalyticsTab() {
                   <stop offset="95%" stopColor="#2563eb" stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#2d3148" />
-              <XAxis dataKey="month" tick={{ fill: "#6b7280", fontSize: 12 }} />
+              <CartesianGrid strokeDasharray="3 3" stroke="#2d3148" vertical={false} />
+              <XAxis dataKey="month" tick={{ fill: "#94a3b8", fontSize: 11 }} tickFormatter={fmtMonthShort} interval="preserveStartEnd" minTickGap={24} />
               <YAxis tick={{ fill: "#6b7280", fontSize: 12 }} tickFormatter={v => `€${v}`} />
               <Tooltip {...tooltipStyle} formatter={fmtEur} />
               <Legend />
@@ -410,8 +517,8 @@ export default function AnalyticsTab() {
               <ChartCard title="Month-over-Month Change" subtitle="Green = cheaper than previous month · Red = more expensive">
                 <ResponsiveContainer width="100%" height={260}>
                   <BarChart data={momRows}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#2d3148" />
-                    <XAxis dataKey="month" tick={{ fill: "#6b7280", fontSize: 11 }} />
+                    <CartesianGrid strokeDasharray="3 3" stroke="#2d3148" vertical={false} />
+                    <XAxis dataKey="month" tick={{ fill: "#94a3b8", fontSize: 11 }} tickFormatter={fmtMonthShort} interval="preserveStartEnd" minTickGap={24} />
                     <YAxis tick={{ fill: "#6b7280", fontSize: 12 }} tickFormatter={v => `${v}%`} />
                     <Tooltip
                       {...tooltipStyle}
@@ -433,8 +540,8 @@ export default function AnalyticsTab() {
               <ChartCard title="Year-over-Year Change" subtitle="Green = cheaper than same month last year · Red = more expensive">
                 <ResponsiveContainer width="100%" height={260}>
                   <BarChart data={yoyRows}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#2d3148" />
-                    <XAxis dataKey="month" tick={{ fill: "#6b7280", fontSize: 11 }} />
+                    <CartesianGrid strokeDasharray="3 3" stroke="#2d3148" vertical={false} />
+                    <XAxis dataKey="month" tick={{ fill: "#94a3b8", fontSize: 11 }} tickFormatter={fmtMonthShort} interval="preserveStartEnd" minTickGap={24} />
                     <YAxis tick={{ fill: "#6b7280", fontSize: 12 }} tickFormatter={v => `${v}%`} />
                     <Tooltip
                       {...tooltipStyle}
@@ -495,11 +602,11 @@ export default function AnalyticsTab() {
         <ChartCard title="Monthly Stacked by Type" subtitle="See which utilities drive costs each month">
           <ResponsiveContainer width="100%" height={320}>
             <BarChart data={stackedRows} margin={{ top: 10, right: 10, left: 0, bottom: 5 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#2d3148" />
-              <XAxis dataKey="month" tick={{ fill: "#6b7280", fontSize: 11 }} />
-              <YAxis tick={{ fill: "#6b7280", fontSize: 12 }} tickFormatter={v => `€${v}`} />
-              <Tooltip {...tooltipStyle} formatter={fmtEur} />
-              <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
+              <CartesianGrid strokeDasharray="3 3" stroke="#2d3148" vertical={false} />
+              <XAxis dataKey="month" tick={{ fill: "#94a3b8", fontSize: 11 }} tickFormatter={fmtMonthShort} interval="preserveStartEnd" minTickGap={24} />
+              <YAxis tick={{ fill: "#94a3b8", fontSize: 11 }} tickFormatter={v => `€${v}`} />
+              <Tooltip content={<RichTooltip unit="€" maxItems={7} />} cursor={{ fill: "rgba(148,163,184,0.08)" }} />
+              <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} iconSize={10} />
               {types.map((t, i) => (
                 <Bar key={t} dataKey={t} stackId="a" fill={colorFor(t, i)} name={t} />
               ))}
@@ -537,8 +644,8 @@ export default function AnalyticsTab() {
         <ChartCard title="Average Bill by Calendar Month" subtitle="Reveals heating spikes in winter, A/C in summer">
           <ResponsiveContainer width="100%" height={320}>
             <BarChart data={seasonalRows} margin={{ top: 10, right: 10, left: 0, bottom: 5 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#2d3148" />
-              <XAxis dataKey="month" tick={{ fill: "#6b7280", fontSize: 12 }} />
+              <CartesianGrid strokeDasharray="3 3" stroke="#2d3148" vertical={false} />
+              <XAxis dataKey="month" tick={{ fill: "#94a3b8", fontSize: 11 }} tickFormatter={fmtMonthShort} interval="preserveStartEnd" minTickGap={24} />
               <YAxis tick={{ fill: "#6b7280", fontSize: 12 }} tickFormatter={v => `€${v}`} />
               <Tooltip {...tooltipStyle} formatter={fmtEur} />
               <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
@@ -571,7 +678,7 @@ export default function AnalyticsTab() {
           <ChartCard title="Annual Spend by Category" subtitle="Compare total utility cost across years">
             <ResponsiveContainer width="100%" height={320}>
               <BarChart data={annualRows} margin={{ top: 10, right: 10, left: 0, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#2d3148" />
+                <CartesianGrid strokeDasharray="3 3" stroke="#2d3148" vertical={false} />
                 <XAxis dataKey="year" tick={{ fill: "#6b7280", fontSize: 12 }} />
                 <YAxis tick={{ fill: "#6b7280", fontSize: 12 }} tickFormatter={v => `€${v}`} />
                 <Tooltip {...tooltipStyle} formatter={fmtEur} />
@@ -610,10 +717,10 @@ export default function AnalyticsTab() {
       <ChartCard title="Each Utility Type Over Time" subtitle="A sudden spike = price change or leak">
         <ResponsiveContainer width="100%" height={340}>
           <LineChart data={stackedRows} margin={{ top: 10, right: 10, left: 0, bottom: 5 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#2d3148" />
-            <XAxis dataKey="month" tick={{ fill: "#6b7280", fontSize: 11 }} />
-            <YAxis tick={{ fill: "#6b7280", fontSize: 12 }} tickFormatter={v => `€${v}`} />
-            <Tooltip {...tooltipStyle} formatter={fmtEur} />
+            <CartesianGrid strokeDasharray="3 3" stroke="#2d3148" vertical={false} />
+            <XAxis dataKey="month" tick={{ fill: "#94a3b8", fontSize: 11 }} tickFormatter={fmtMonthShort} interval="preserveStartEnd" minTickGap={24} />
+            <YAxis tick={{ fill: "#94a3b8", fontSize: 11 }} tickFormatter={v => `€${v}`} />
+            <Tooltip content={<RichTooltip />} />
             <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
             {types.map((t, i) => (
               <Line key={t} type="monotone" dataKey={t} stroke={colorFor(t, i)} name={t} strokeWidth={2} dot={{ r: 3 }} />
@@ -662,21 +769,18 @@ export default function AnalyticsTab() {
           <SectionTitle>💶 9. Unit Price Trends (€ per unit)</SectionTitle>
           <ChartCard
             title="Price per Unit Over Time"
-            subtitle="Tracks €/kWh, €/m², €/m³ changes across months — reveals tariff hikes independent of consumption"
+            subtitle={`Top ${priceVaryingLabels.length} most-varying unit prices — reveals tariff hikes independent of consumption`}
           >
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={unitPriceRows}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#2d3148" />
-                <XAxis dataKey="month" tick={{ fill: "#6b7280", fontSize: 11 }} />
-                <YAxis tick={{ fill: "#6b7280", fontSize: 12 }} tickFormatter={v => `€${v}`} />
-                <Tooltip
-                  {...tooltipStyle}
-                  formatter={(v: unknown) => [`€${(v as number).toFixed(4)}/unit`, "unit price"]}
-                />
-                <Legend />
+            <ResponsiveContainer width="100%" height={340}>
+              <LineChart data={unitPriceRows} margin={{ top: 10, right: 20, left: 0, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#2d3148" vertical={false} />
+                <XAxis dataKey="month" tick={{ fill: "#94a3b8", fontSize: 11 }} tickFormatter={fmtMonthShort} interval="preserveStartEnd" minTickGap={24} />
+                <YAxis tick={{ fill: "#94a3b8", fontSize: 11 }} tickFormatter={v => `€${Number(v).toFixed(2)}`} />
+                <Tooltip content={<RichTooltip unit="€" showTotal={false} maxItems={8} />} />
+                <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} iconSize={10} />
                 {priceVaryingLabels.map((label, i) => (
                   <Line key={label} type="monotone" dataKey={label} stroke={PALETTE[i % PALETTE.length]}
-                    name={label} strokeWidth={2} dot={{ r: 4 }} connectNulls />
+                    name={label} strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} connectNulls />
                 ))}
               </LineChart>
             </ResponsiveContainer>
@@ -685,23 +789,25 @@ export default function AnalyticsTab() {
       )}
 
       {/* 10. Line-item cost comparison across months */}
-      {liCostRows.length > 1 && liLabels.length > 0 && (
+      {liStackData.length > 1 && liStackLabels.length > 0 && (
         <>
           <SectionTitle>🧾 10. Line-Item Cost Comparison Across Months</SectionTitle>
           <ChartCard
             title="Every Line Item by Month"
-            subtitle="See which individual charge drove the bill up or down each month"
+            subtitle={`Top ${topLabels.length} charges by total spend${hasOther ? ' · rest grouped as "Other"' : ''}`}
           >
             <div style={{ overflowX: "auto" }}>
-              <ResponsiveContainer width={Math.max(600, liCostRows.length * 120)} height={320}>
-                <BarChart data={liCostRows}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#2d3148" />
-                  <XAxis dataKey="month" tick={{ fill: "#6b7280", fontSize: 11 }} />
-                  <YAxis tick={{ fill: "#6b7280", fontSize: 12 }} tickFormatter={v => `€${v}`} />
-                  <Tooltip {...tooltipStyle} formatter={fmtEur} />
-                  <Legend wrapperStyle={{ fontSize: 12 }} />
-                  {liLabels.map((label, i) => (
-                    <Bar key={label} dataKey={label} stackId="a" fill={PALETTE[i % PALETTE.length]} name={label} />
+              <ResponsiveContainer width={Math.max(600, liStackData.length * 90)} height={360}>
+                <BarChart data={liStackData} margin={{ top: 10, right: 20, left: 0, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#2d3148" vertical={false} />
+                  <XAxis dataKey="month" tick={{ fill: "#94a3b8", fontSize: 11 }} tickFormatter={fmtMonthShort} interval="preserveStartEnd" minTickGap={24} />
+                  <YAxis tick={{ fill: "#94a3b8", fontSize: 11 }} tickFormatter={v => `€${v}`} />
+                  <Tooltip content={<RichTooltip unit="€" showTotal maxItems={6} />} cursor={{ fill: "rgba(148,163,184,0.08)" }} />
+                  <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} iconSize={10} />
+                  {liStackLabels.map((label, i) => (
+                    <Bar key={label} dataKey={label} stackId="a"
+                      fill={label === "Other" ? "#475569" : PALETTE[i % PALETTE.length]}
+                      name={label} />
                   ))}
                 </BarChart>
               </ResponsiveContainer>
@@ -721,7 +827,7 @@ export default function AnalyticsTab() {
             <div style={{ overflowX: "auto" }}>
               <ResponsiveContainer width={Math.max(600, decompRows.length * 80)} height={300}>
                 <BarChart data={decompRows}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#2d3148" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#2d3148" vertical={false} />
                   <XAxis dataKey="label" tick={{ fill: "#6b7280", fontSize: 11 }} interval={0} angle={-20} textAnchor="end" height={56} />
                   <YAxis tick={{ fill: "#6b7280", fontSize: 12 }} tickFormatter={v => `€${v}`} />
                   <Tooltip
