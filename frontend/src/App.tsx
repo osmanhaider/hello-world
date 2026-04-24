@@ -2,9 +2,10 @@ import { useState } from "react";
 import UploadTab from "./components/UploadTab";
 import BillsTab from "./components/BillsTab";
 import AnalyticsTab from "./components/AnalyticsTab";
-import { BarChart2, Receipt, Upload } from "lucide-react";
+import HelpTab from "./components/HelpTab";
+import { BarChart2, Receipt, Upload, HelpCircle } from "lucide-react";
 
-type Tab = "upload" | "bills" | "analytics";
+type Tab = "upload" | "bills" | "analytics" | "help";
 
 export default function App() {
   const [tab, setTab] = useState<Tab>("upload");
@@ -29,6 +30,7 @@ export default function App() {
             ["upload", "Upload", Upload],
             ["bills", "Bills", Receipt],
             ["analytics", "Analytics", BarChart2],
+            ["help", "Help", HelpCircle],
           ] as [Tab, string, React.ElementType][]).map(([id, label, Icon]) => (
             <button
               key={id}
@@ -52,6 +54,7 @@ export default function App() {
         {tab === "upload" && <UploadTab onSuccess={() => { refresh(); setTab("bills"); }} />}
         {tab === "bills" && <BillsTab key={refreshKey} />}
         {tab === "analytics" && <AnalyticsTab key={refreshKey} />}
+        {tab === "help" && <HelpTab />}
       </main>
     </div>
   );
