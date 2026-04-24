@@ -252,10 +252,12 @@ async def upload_bill(
         else:
             parsed = parse_bill_tesseract(save_path)
         parsed = enrich_parsed(parsed)  # add translations locally — no API call
-    except Exception:
+    except Exception as e:
         logger.exception("Bill parsing failed for %s (backend=%s)", filename, effective_parser)
+        # Surface the actual error string so the UI can tell the user what
+        # went wrong — "model not available", rate limit, bad JSON, etc.
         parsed = {
-            "error": "Parsing failed — see server logs for details.",
+            "error": f"{type(e).__name__}: {e}",
             "_source": effective_parser,
             "_low_quality": True,
         }
