@@ -29,6 +29,22 @@ const PALETTE = [
   "#0ea5e9", "#ec4899", "#14b8a6", "#f97316", "#6366f1",
 ];
 
+const TYPE_LABELS: Record<string, string> = {
+  electricity: "Electricity",
+  gas: "Gas",
+  water: "Water",
+  heating: "Heating",
+  internet: "Internet",
+  telecom: "Telecom",
+  waste: "Waste",
+  management: "Management",
+  other: "Other",
+};
+
+function labelFor(t: string) {
+  return TYPE_LABELS[t] ?? t.charAt(0).toUpperCase() + t.slice(1);
+}
+
 function colorFor(t: string, i = 0) {
   return COLORS[t] ?? PALETTE[i % PALETTE.length];
 }
@@ -174,35 +190,75 @@ export default function AnalyticsTab() {
     if (!dashboardRef.current) return;
     setExporting(true);
     try {
-      const canvas = await html2canvas(dashboardRef.current, {
-        backgroundColor: "#0b0d14",
-        scale: 2,
-        useCORS: true,
-        logging: false,
-        windowWidth: dashboardRef.current.scrollWidth,
-        windowHeight: dashboardRef.current.scrollHeight,
-      });
-
-      const imgData = canvas.toDataURL("image/png");
       const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
       const pageWidth = pdf.internal.pageSize.getWidth();   // 210mm
       const pageHeight = pdf.internal.pageSize.getHeight(); // 297mm
+      const margin = 10;
+      const usableWidth = pageWidth - 2 * margin;
+      const usableHeight = pageHeight - 2 * margin;
+      const gap = 3;                                        // mm between chunks
 
-      const imgWidth = pageWidth - 20;                      // 10mm margin each side
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      // Render each top-level child to its own canvas so we can paginate at
+      // chunk boundaries instead of slicing through chart bodies.
+      const children = Array.from(dashboardRef.current.children) as HTMLElement[];
+      let currentY = margin;
+      let isFirstChunk = true;
 
-      let heightLeft = imgHeight;
-      let position = 10;                                    // top margin
-      const pagePixelHeight = pageHeight - 20;              // usable height per page
+      for (const child of children) {
+        const canvas = await html2canvas(child, {
+          backgroundColor: "#0b0d14",
+          scale: 2,
+          useCORS: true,
+          logging: false,
+        });
+        const imgW = usableWidth;
+        const imgH = (canvas.height * imgW) / canvas.width;
 
-      pdf.addImage(imgData, "PNG", 10, position, imgWidth, imgHeight);
-      heightLeft -= pagePixelHeight;
+        // Chunk fits on a single page — place whole, starting a new page if needed.
+        if (imgH <= usableHeight) {
+          if (!isFirstChunk && currentY + imgH > pageHeight - margin) {
+            pdf.addPage();
+            currentY = margin;
+          }
+          pdf.addImage(canvas.toDataURL("image/png"), "PNG", margin, currentY, imgW, imgH);
+          currentY += imgH + gap;
+          isFirstChunk = false;
+          continue;
+        }
 
-      while (heightLeft > 0) {
-        position = 10 - (imgHeight - heightLeft);
-        pdf.addPage();
-        pdf.addImage(imgData, "PNG", 10, position, imgWidth, imgHeight);
-        heightLeft -= pagePixelHeight;
+        // Chunk is taller than a page — slice it across pages by copying
+        // horizontal bands of the source canvas into a scratch canvas.
+        const pxPerMm = canvas.width / usableWidth;
+        let remainingMm = imgH;
+        let srcY = 0;
+        if (!isFirstChunk) {
+          pdf.addPage();
+          currentY = margin;
+        }
+        while (remainingMm > 0) {
+          const roomMm = pageHeight - margin - currentY;
+          const sliceMm = Math.min(remainingMm, roomMm);
+          const sliceHpx = Math.floor(sliceMm * pxPerMm);
+          const slice = document.createElement("canvas");
+          slice.width = canvas.width;
+          slice.height = sliceHpx;
+          const ctx = slice.getContext("2d");
+          if (ctx) {
+            ctx.fillStyle = "#0b0d14";
+            ctx.fillRect(0, 0, slice.width, slice.height);
+            ctx.drawImage(canvas, 0, srcY, canvas.width, sliceHpx, 0, 0, canvas.width, sliceHpx);
+          }
+          pdf.addImage(slice.toDataURL("image/png"), "PNG", margin, currentY, imgW, sliceMm);
+          srcY += sliceHpx;
+          remainingMm -= sliceMm;
+          if (remainingMm > 0) {
+            pdf.addPage();
+            currentY = margin;
+          } else {
+            currentY += sliceMm + gap;
+          }
+        }
+        isFirstChunk = false;
       }
 
       const stamp = new Date().toISOString().slice(0, 10);
@@ -619,7 +675,7 @@ export default function AnalyticsTab() {
                 innerRadius={60}
                 outerRadius={100}
                 paddingAngle={2}
-                label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
+                label={({ name, percent }) => `${labelFor(name)} ${((percent ?? 0) * 100).toFixed(0)}%`}
                 labelLine={false}
               >
                 {data.by_type.map((entry, i) => (
@@ -740,7 +796,7 @@ export default function AnalyticsTab() {
                 <td style={{ padding: "12px 16px" }}>
                   <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     <span style={{ width: 8, height: 8, borderRadius: "50%", background: colorFor(row.utility_type, i), display: "inline-block" }} />
-                    <span style={{ color: "white", textTransform: "capitalize" }}>{row.utility_type}</span>
+                    <span style={{ color: "white" }}>{labelFor(row.utility_type)}</span>
                   </span>
                 </td>
                 <td style={{ padding: "12px 16px", color: "#9ca3af" }}>{row.bill_count}</td>
