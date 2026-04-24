@@ -41,6 +41,18 @@ Two extraction backends are available:
               └─────────────────┘           └────────────────┘
 ```
 
+## Run with Docker (easiest)
+
+```bash
+# Tesseract backend (default):
+docker compose up --build
+
+# Claude backend:
+ANTHROPIC_API_KEY=sk-ant-... PARSER_BACKEND=claude docker compose up --build
+```
+
+Open **http://localhost:5173**. Uploads and the SQLite DB are persisted in a named volume (`backend-data`).
+
 ## Run locally
 
 ### Prerequisites
@@ -112,9 +124,16 @@ python3 -m venv venv
 
 Backend is now at **http://localhost:8000**.
 
-Backend env vars:
+Backend env vars (see `backend/.env.example` for the full list):
 - `PARSER_BACKEND=tesseract` *(default)* — open-source, local, no API key. Best on Estonian utility bills and korteriühistu invoices.
 - `PARSER_BACKEND=claude` — Anthropic Claude API, requires `ANTHROPIC_API_KEY`. Works on any invoice format, any language, any layout — use this if the Tesseract parser shows a low-quality warning for your invoice.
+- `MAX_UPLOAD_BYTES` — hard cap on upload size in bytes (default 20 MB).
+- `DB_PATH`, `UPLOADS_DIR`, `LOG_LEVEL` — override storage paths and log verbosity.
+
+Frontend env var (see `frontend/.env.example`):
+- `VITE_API_URL` — base URL of the backend. Defaults to `http://localhost:8000`.
+
+> ⚠️ **Security**: the API has no authentication. Run locally only — do not expose it to the public internet without adding an auth layer (reverse proxy with basic auth, Cloudflare Access, etc.).
 
 ### 4. Start the frontend (in a second terminal)
 

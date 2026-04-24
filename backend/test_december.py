@@ -2,6 +2,7 @@
 Notable: this bill has no water lines and no doormat rental — just 11 items.
 """
 from PIL import Image, ImageDraw, ImageFont
+
 from parser import parse_bill
 from translation import enrich_parsed
 

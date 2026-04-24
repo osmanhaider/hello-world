@@ -3,6 +3,7 @@ import UploadTab from "./components/UploadTab";
 import BillsTab from "./components/BillsTab";
 import AnalyticsTab from "./components/AnalyticsTab";
 import HelpTab from "./components/HelpTab";
+import ErrorBoundary from "./components/ErrorBoundary";
 import { BarChart2, Receipt, Upload, HelpCircle } from "lucide-react";
 
 type Tab = "upload" | "bills" | "analytics" | "help";
@@ -51,10 +52,12 @@ export default function App() {
       </header>
 
       <main style={{ padding: "24px", maxWidth: 1280, margin: "0 auto" }}>
-        {tab === "upload" && <UploadTab onSuccess={() => { refresh(); setTab("bills"); }} />}
-        {tab === "bills" && <BillsTab key={refreshKey} />}
-        {tab === "analytics" && <AnalyticsTab key={refreshKey} />}
-        {tab === "help" && <HelpTab />}
+        <ErrorBoundary>
+          {tab === "upload" && <UploadTab onSuccess={() => { refresh(); setTab("bills"); }} />}
+          {tab === "bills" && <BillsTab key={refreshKey} />}
+          {tab === "analytics" && <AnalyticsTab key={refreshKey} />}
+          {tab === "help" && <HelpTab />}
+        </ErrorBoundary>
       </main>
     </div>
   );
