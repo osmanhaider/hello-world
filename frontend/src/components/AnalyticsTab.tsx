@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useIsMobile } from "../hooks/useIsMobile";
 import { api, type AnalyticsSummary } from "../api";
 import {
   LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, RadarChart, Radar,
@@ -181,6 +182,7 @@ export default function AnalyticsTab() {
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+  const isMobile = useIsMobile();
   const dashboardRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -438,7 +440,8 @@ export default function AnalyticsTab() {
   }
   const liStackData = Object.values(liStackRows).sort((a, b) => String(a.month).localeCompare(String(b.month)));
 
-  const grid2 = { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))", gap: 20 };
+  const grid2 = { display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fill, minmax(340px, 1fr))", gap: isMobile ? 12 : 20 };
+  const chartH = (base: number) => isMobile ? Math.round(base * 0.75) : base;
 
   return (
     <div>
@@ -541,7 +544,7 @@ export default function AnalyticsTab() {
       <SectionTitle>📈 1. Monthly Spending Trend &amp; Rolling Average</SectionTitle>
       <div style={grid2}>
         <ChartCard title="Total Monthly Spend — Line" subtitle="Clean line chart of monthly total with labeled points">
-          <ResponsiveContainer width="100%" height={260}>
+          <ResponsiveContainer width="100%" height={chartH(260)}>
             <LineChart data={data.monthly_total} margin={{ top: 20, right: 20, left: 0, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#2d3148" vertical={false} />
               <XAxis dataKey="month" tick={{ fill: "#94a3b8", fontSize: 11 }} tickFormatter={fmtMonthShort} interval="preserveStartEnd" minTickGap={24} />
@@ -577,7 +580,7 @@ export default function AnalyticsTab() {
         </ChartCard>
 
         <ChartCard title="Total Monthly Spend — Area" subtitle="Filled area view · Dashed line = 3-month rolling average">
-          <ResponsiveContainer width="100%" height={260}>
+          <ResponsiveContainer width="100%" height={chartH(260)}>
             <AreaChart data={data.monthly_total}>
               <defs>
                 <linearGradient id="totalGrad" x1="0" y1="0" x2="0" y2="1">
@@ -604,7 +607,7 @@ export default function AnalyticsTab() {
           <div style={grid2}>
             {momRows.length > 0 && (
               <ChartCard title="Month-over-Month Change" subtitle="Green = cheaper than previous month · Red = more expensive">
-                <ResponsiveContainer width="100%" height={260}>
+                <ResponsiveContainer width="100%" height={chartH(260)}>
                   <BarChart data={momRows}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#2d3148" vertical={false} />
                     <XAxis dataKey="month" tick={{ fill: "#94a3b8", fontSize: 11 }} tickFormatter={fmtMonthShort} interval="preserveStartEnd" minTickGap={24} />
@@ -622,7 +625,7 @@ export default function AnalyticsTab() {
 
             {yoyRows.length > 0 && (
               <ChartCard title="Year-over-Year Change" subtitle="Green = cheaper than same month last year · Red = more expensive">
-                <ResponsiveContainer width="100%" height={260}>
+                <ResponsiveContainer width="100%" height={chartH(260)}>
                   <BarChart data={yoyRows}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#2d3148" vertical={false} />
                     <XAxis dataKey="month" tick={{ fill: "#94a3b8", fontSize: 11 }} tickFormatter={fmtMonthShort} interval="preserveStartEnd" minTickGap={24} />
@@ -679,7 +682,7 @@ export default function AnalyticsTab() {
       <SectionTitle>🗂️ 3. Spend Breakdown by Utility Type</SectionTitle>
       <div style={grid2}>
         <ChartCard title="Monthly Stacked by Type" subtitle="See which utilities drive costs each month">
-          <ResponsiveContainer width="100%" height={320}>
+          <ResponsiveContainer width="100%" height={chartH(320)}>
             <BarChart data={stackedRows} margin={{ top: 10, right: 10, left: 0, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#2d3148" vertical={false} />
               <XAxis dataKey="month" tick={{ fill: "#94a3b8", fontSize: 11 }} tickFormatter={fmtMonthShort} interval="preserveStartEnd" minTickGap={24} />
@@ -694,7 +697,7 @@ export default function AnalyticsTab() {
         </ChartCard>
 
         <ChartCard title="Share of Total Spend" subtitle="Cumulative share per category">
-          <ResponsiveContainer width="100%" height={320}>
+          <ResponsiveContainer width="100%" height={chartH(320)}>
             <PieChart>
               <Pie
                 data={data.by_type}
@@ -742,7 +745,7 @@ export default function AnalyticsTab() {
       <SectionTitle>🌡️ 4. Seasonal Cost Patterns</SectionTitle>
       <div style={grid2}>
         <ChartCard title="Average Bill by Calendar Month" subtitle="Reveals heating spikes in winter, A/C in summer">
-          <ResponsiveContainer width="100%" height={320}>
+          <ResponsiveContainer width="100%" height={chartH(320)}>
             <BarChart data={seasonalRows} margin={{ top: 10, right: 10, left: 0, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#2d3148" vertical={false} />
               <XAxis dataKey="month" tick={{ fill: "#94a3b8", fontSize: 11 }} tickFormatter={fmtMonthShort} interval="preserveStartEnd" minTickGap={24} />
@@ -757,7 +760,7 @@ export default function AnalyticsTab() {
         </ChartCard>
 
         <ChartCard title="Seasonal Radar Profile" subtitle="Shape = energy use pattern across 4 seasons">
-          <ResponsiveContainer width="100%" height={320}>
+          <ResponsiveContainer width="100%" height={chartH(320)}>
             <RadarChart data={radarData} cx="50%" cy="45%" outerRadius={75}>
               <PolarGrid stroke="#2d3148" />
               <PolarAngleAxis dataKey="season" tick={{ fill: "#9ca3af", fontSize: 12 }} />
@@ -776,7 +779,7 @@ export default function AnalyticsTab() {
         <>
           <SectionTitle>📅 5. Annual Spend Comparison</SectionTitle>
           <ChartCard title="Annual Spend by Category" subtitle="Compare total utility cost across years">
-            <ResponsiveContainer width="100%" height={320}>
+            <ResponsiveContainer width="100%" height={chartH(320)}>
               <BarChart data={annualRows} margin={{ top: 10, right: 10, left: 0, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#2d3148" vertical={false} />
                 <XAxis dataKey="year" tick={{ fill: "#6b7280", fontSize: 12 }} />
@@ -797,11 +800,11 @@ export default function AnalyticsTab() {
         <>
           <SectionTitle>🏢 6. Spend by Provider</SectionTitle>
           <ChartCard title="Top Providers by Total Spend" subtitle="Identify your most expensive suppliers">
-            <ResponsiveContainer width="100%" height={220}>
+            <ResponsiveContainer width="100%" height={chartH(220)}>
               <BarChart data={topProviders} layout="vertical">
                 <CartesianGrid strokeDasharray="3 3" stroke="#2d3148" horizontal={false} />
                 <XAxis type="number" tick={{ fill: "#6b7280", fontSize: 12 }} tickFormatter={v => `€${v}`} />
-                <YAxis type="category" dataKey="provider" tick={{ fill: "#9ca3af", fontSize: 12 }} width={120} />
+                <YAxis type="category" dataKey="provider" tick={{ fill: "#9ca3af", fontSize: isMobile ? 10 : 12 }} width={isMobile ? 80 : 120} />
                 <Tooltip content={<RichTooltip unit="€" />} cursor={{ fill: "rgba(148,163,184,0.08)" }} />
                 <Bar dataKey="total_eur" fill="#2563eb" name="Total Spend" radius={[0, 4, 4, 0]}>
                   {topProviders.map((_, i) => <Cell key={i} fill={PALETTE[i % PALETTE.length]} />)}
@@ -815,7 +818,7 @@ export default function AnalyticsTab() {
       {/* 7. Per-type trend lines */}
       <SectionTitle>📊 7. Per-Utility Trend Lines</SectionTitle>
       <ChartCard title="Each Utility Type Over Time" subtitle="A sudden spike = price change or leak">
-        <ResponsiveContainer width="100%" height={340}>
+        <ResponsiveContainer width="100%" height={chartH(340)}>
           <LineChart data={stackedRows} margin={{ top: 10, right: 10, left: 0, bottom: 5 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#2d3148" vertical={false} />
             <XAxis dataKey="month" tick={{ fill: "#94a3b8", fontSize: 11 }} tickFormatter={fmtMonthShort} interval="preserveStartEnd" minTickGap={24} />
@@ -832,7 +835,8 @@ export default function AnalyticsTab() {
       {/* 8. Summary stats table */}
       <SectionTitle>🔢 8. Summary Statistics by Type</SectionTitle>
       <div style={{ background: "#1a1d27", border: "1px solid #2d3148", borderRadius: 12, overflow: "hidden" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
+        <div style={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14, minWidth: 520 }}>
           <thead>
             <tr style={{ borderBottom: "1px solid #2d3148" }}>
               {["Type", "Bills", "Total", "Avg/Month", "Min", "Max", "Consumption"].map(h => (
@@ -861,6 +865,7 @@ export default function AnalyticsTab() {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
 
       {/* 9. Line-item unit price trends */}
@@ -871,7 +876,7 @@ export default function AnalyticsTab() {
             title="Price per Unit Over Time"
             subtitle={`Top ${priceVaryingLabels.length} most-varying unit prices — reveals tariff hikes independent of consumption`}
           >
-            <ResponsiveContainer width="100%" height={340}>
+            <ResponsiveContainer width="100%" height={chartH(340)}>
               <LineChart data={unitPriceRows} margin={{ top: 10, right: 20, left: 0, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#2d3148" vertical={false} />
                 <XAxis dataKey="month" tick={{ fill: "#94a3b8", fontSize: 11 }} tickFormatter={fmtMonthShort} interval="preserveStartEnd" minTickGap={24} />

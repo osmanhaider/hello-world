@@ -8,6 +8,7 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import { BarChart2, Receipt, Upload, HelpCircle, LogOut } from "lucide-react";
 import { api } from "./api";
 import { clearToken, getToken } from "./auth";
+import { useIsMobile } from "./hooks/useIsMobile";
 
 type Tab = "upload" | "bills" | "analytics" | "help";
 type AuthState = "loading" | "required" | "authed" | "disabled";
@@ -16,6 +17,7 @@ export default function App() {
   const [tab, setTab] = useState<Tab>("upload");
   const [refreshKey, setRefreshKey] = useState(0);
   const [authState, setAuthState] = useState<AuthState>("loading");
+  const isMobile = useIsMobile();
 
   const refresh = () => setRefreshKey((k) => k + 1);
 
@@ -77,17 +79,23 @@ export default function App() {
 
   return (
     <div style={{ minHeight: "100vh", background: "#0f1117", color: "#e5e7eb", fontFamily: "system-ui, sans-serif" }}>
-      <header style={{ background: "#1a1d27", borderBottom: "1px solid #2d3148", padding: "16px 24px", display: "flex", alignItems: "center", gap: "16px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          <div style={{ width: 36, height: 36, background: "#2563eb", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <Receipt size={18} color="white" />
+      <header style={{
+        background: "#1a1d27", borderBottom: "1px solid #2d3148",
+        padding: isMobile ? "12px 16px" : "16px 24px",
+        display: "flex", alignItems: "center", gap: isMobile ? 8 : 16,
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 8 : 12 }}>
+          <div style={{ width: 32, height: 32, background: "#2563eb", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <Receipt size={16} color="white" />
           </div>
-          <div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: "white" }}>EE Utility Tracker</div>
-            <div style={{ fontSize: 12, color: "#9ca3af" }}>Estonia Monthly Bill Analytics</div>
-          </div>
+          {!isMobile && (
+            <div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: "white" }}>EE Utility Tracker</div>
+              <div style={{ fontSize: 12, color: "#9ca3af" }}>Estonia Monthly Bill Analytics</div>
+            </div>
+          )}
         </div>
-        <nav style={{ marginLeft: "auto", display: "flex", gap: 4, alignItems: "center" }}>
+        <nav style={{ marginLeft: "auto", display: "flex", gap: isMobile ? 2 : 4, alignItems: "center" }}>
           {([
             ["upload", "Upload", Upload],
             ["bills", "Bills", Receipt],
@@ -97,16 +105,19 @@ export default function App() {
             <button
               key={id}
               onClick={() => setTab(id)}
+              title={label}
               style={{
-                display: "flex", alignItems: "center", gap: 8, padding: "8px 16px",
-                borderRadius: 8, border: "none", cursor: "pointer", fontSize: 14, fontWeight: 500,
+                display: "flex", alignItems: "center", gap: 6,
+                padding: isMobile ? "8px 10px" : "8px 14px",
+                borderRadius: 8, border: "none", cursor: "pointer",
+                fontSize: 13, fontWeight: 500,
                 background: tab === id ? "#2563eb" : "transparent",
                 color: tab === id ? "white" : "#9ca3af",
                 transition: "all 0.15s",
               }}
             >
               <Icon size={16} />
-              {label}
+              {!isMobile && label}
             </button>
           ))}
           {authState === "authed" && (
@@ -114,19 +125,21 @@ export default function App() {
               onClick={logout}
               title="Sign out"
               style={{
-                display: "flex", alignItems: "center", gap: 8, padding: "8px 12px",
-                borderRadius: 8, border: "1px solid #2d3148", cursor: "pointer", fontSize: 13,
-                background: "transparent", color: "#9ca3af", marginLeft: 8,
+                display: "flex", alignItems: "center", gap: 6,
+                padding: isMobile ? "8px 10px" : "8px 12px",
+                borderRadius: 8, border: "1px solid #2d3148", cursor: "pointer",
+                fontSize: 13, background: "transparent", color: "#9ca3af",
+                marginLeft: isMobile ? 4 : 8,
               }}
             >
               <LogOut size={14} />
-              Sign out
+              {!isMobile && "Sign out"}
             </button>
           )}
         </nav>
       </header>
 
-      <main style={{ padding: "24px", maxWidth: 1280, margin: "0 auto" }}>
+      <main style={{ padding: isMobile ? "16px 12px" : "24px", maxWidth: 1280, margin: "0 auto" }}>
         <ErrorBoundary>
           {tab === "upload" && <UploadTab onSuccess={() => { refresh(); setTab("bills"); }} />}
           {tab === "bills" && <BillsTab key={refreshKey} />}
