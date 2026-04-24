@@ -493,13 +493,13 @@ export default function AnalyticsTab() {
       <SectionTitle>🗂️ 3. Spend Breakdown by Utility Type</SectionTitle>
       <div style={grid2}>
         <ChartCard title="Monthly Stacked by Type" subtitle="See which utilities drive costs each month">
-          <ResponsiveContainer width="100%" height={260}>
-            <BarChart data={stackedRows}>
+          <ResponsiveContainer width="100%" height={320}>
+            <BarChart data={stackedRows} margin={{ top: 10, right: 10, left: 0, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#2d3148" />
               <XAxis dataKey="month" tick={{ fill: "#6b7280", fontSize: 11 }} />
               <YAxis tick={{ fill: "#6b7280", fontSize: 12 }} tickFormatter={v => `€${v}`} />
               <Tooltip {...tooltipStyle} formatter={fmtEur} />
-              <Legend />
+              <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
               {types.map((t, i) => (
                 <Bar key={t} dataKey={t} stackId="a" fill={colorFor(t, i)} name={t} />
               ))}
@@ -508,7 +508,7 @@ export default function AnalyticsTab() {
         </ChartCard>
 
         <ChartCard title="Share of Total Spend" subtitle="Cumulative share per category">
-          <ResponsiveContainer width="100%" height={260}>
+          <ResponsiveContainer width="100%" height={320}>
             <PieChart>
               <Pie
                 data={data.by_type}
@@ -535,13 +535,13 @@ export default function AnalyticsTab() {
       <SectionTitle>🌡️ 4. Seasonal Cost Patterns</SectionTitle>
       <div style={grid2}>
         <ChartCard title="Average Bill by Calendar Month" subtitle="Reveals heating spikes in winter, A/C in summer">
-          <ResponsiveContainer width="100%" height={260}>
-            <BarChart data={seasonalRows}>
+          <ResponsiveContainer width="100%" height={320}>
+            <BarChart data={seasonalRows} margin={{ top: 10, right: 10, left: 0, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#2d3148" />
               <XAxis dataKey="month" tick={{ fill: "#6b7280", fontSize: 12 }} />
               <YAxis tick={{ fill: "#6b7280", fontSize: 12 }} tickFormatter={v => `€${v}`} />
               <Tooltip {...tooltipStyle} formatter={fmtEur} />
-              <Legend />
+              <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
               {types.map((t, i) => (
                 <Bar key={t} dataKey={t} fill={colorFor(t, i)} name={t} />
               ))}
@@ -550,14 +550,14 @@ export default function AnalyticsTab() {
         </ChartCard>
 
         <ChartCard title="Seasonal Radar Profile" subtitle="Shape = energy use pattern across 4 seasons">
-          <ResponsiveContainer width="100%" height={260}>
-            <RadarChart data={radarData} cx="50%" cy="50%" outerRadius={90}>
+          <ResponsiveContainer width="100%" height={320}>
+            <RadarChart data={radarData} cx="50%" cy="45%" outerRadius={75}>
               <PolarGrid stroke="#2d3148" />
-              <PolarAngleAxis dataKey="season" tick={{ fill: "#9ca3af", fontSize: 13 }} />
+              <PolarAngleAxis dataKey="season" tick={{ fill: "#9ca3af", fontSize: 12 }} />
               {radarTypes.map((t, i) => (
                 <Radar key={t} name={t} dataKey={t} stroke={colorFor(t, i)} fill={colorFor(t, i)} fillOpacity={0.15} />
               ))}
-              <Legend />
+              <Legend wrapperStyle={{ fontSize: 11, paddingTop: 12 }} />
               <Tooltip {...tooltipStyle} formatter={fmtEur} />
             </RadarChart>
           </ResponsiveContainer>
@@ -569,13 +569,13 @@ export default function AnalyticsTab() {
         <>
           <SectionTitle>📅 5. Annual Spend Comparison</SectionTitle>
           <ChartCard title="Annual Spend by Category" subtitle="Compare total utility cost across years">
-            <ResponsiveContainer width="100%" height={260}>
-              <BarChart data={annualRows}>
+            <ResponsiveContainer width="100%" height={320}>
+              <BarChart data={annualRows} margin={{ top: 10, right: 10, left: 0, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#2d3148" />
                 <XAxis dataKey="year" tick={{ fill: "#6b7280", fontSize: 12 }} />
                 <YAxis tick={{ fill: "#6b7280", fontSize: 12 }} tickFormatter={v => `€${v}`} />
                 <Tooltip {...tooltipStyle} formatter={fmtEur} />
-                <Legend />
+                <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
                 {types.map((t, i) => (
                   <Bar key={t} dataKey={t} fill={colorFor(t, i)} name={t} />
                 ))}
@@ -608,13 +608,13 @@ export default function AnalyticsTab() {
       {/* 7. Per-type trend lines */}
       <SectionTitle>📊 7. Per-Utility Trend Lines</SectionTitle>
       <ChartCard title="Each Utility Type Over Time" subtitle="A sudden spike = price change or leak">
-        <ResponsiveContainer width="100%" height={300}>
-          <LineChart data={stackedRows}>
+        <ResponsiveContainer width="100%" height={340}>
+          <LineChart data={stackedRows} margin={{ top: 10, right: 10, left: 0, bottom: 5 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#2d3148" />
             <XAxis dataKey="month" tick={{ fill: "#6b7280", fontSize: 11 }} />
             <YAxis tick={{ fill: "#6b7280", fontSize: 12 }} tickFormatter={v => `€${v}`} />
             <Tooltip {...tooltipStyle} formatter={fmtEur} />
-            <Legend />
+            <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
             {types.map((t, i) => (
               <Line key={t} type="monotone" dataKey={t} stroke={colorFor(t, i)} name={t} strokeWidth={2} dot={{ r: 3 }} />
             ))}
