@@ -71,7 +71,11 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
       const res = await api.uploadBill(file, parserMode, effectiveModel || undefined);
       setParsed(res.data.parsed);
       setStatus(res.data.replaced ? "replaced" : "success");
-      setTimeout(onSuccess, 2000);
+      // If parsing failed, keep the user on this tab so they can read the
+      // error and pick a different model. They can navigate to Bills manually.
+      if (!res.data.parsed?._low_quality) {
+        setTimeout(onSuccess, 2000);
+      }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Upload failed";
       setErrorMsg(msg);
@@ -227,9 +231,19 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
           </div>
         ) : status === "success" ? (
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
-            <CheckCircle size={40} color="#22c55e" />
-            <p style={{ color: "#22c55e", margin: 0, fontWeight: 600 }}>Bill uploaded successfully!</p>
-            <p style={{ color: "#9ca3af", margin: 0, fontSize: 13 }}>Redirecting to bills list…</p>
+            {parsed?._low_quality ? (
+              <>
+                <AlertCircle size={40} color="#f59e0b" />
+                <p style={{ color: "#f59e0b", margin: 0, fontWeight: 600 }}>File saved, but data couldn't be extracted</p>
+                <p style={{ color: "#9ca3af", margin: 0, fontSize: 13 }}>See details below — try a different model or upload again</p>
+              </>
+            ) : (
+              <>
+                <CheckCircle size={40} color="#22c55e" />
+                <p style={{ color: "#22c55e", margin: 0, fontWeight: 600 }}>Bill uploaded successfully!</p>
+                <p style={{ color: "#9ca3af", margin: 0, fontSize: 13 }}>Redirecting to bills list…</p>
+              </>
+            )}
           </div>
         ) : status === "error" ? (
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
