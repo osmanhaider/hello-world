@@ -33,7 +33,7 @@ UPLOADS_DIR = os.environ.get("UPLOADS_DIR", "uploads")
 os.makedirs(UPLOADS_DIR, exist_ok=True)
 
 # Hard cap on upload size — protects against memory exhaustion from huge files.
-MAX_UPLOAD_BYTES = int(os.environ.get("MAX_UPLOAD_BYTES", 20 * 1024 * 1024))  # 20 MB
+MAX_UPLOAD_BYTES = int(os.environ.get("MAX_UPLOAD_BYTES", 25 * 1024 * 1024))  # 25 MB
 
 # Allowed filename extensions (lowercased). The MIME check below is the
 # primary gate; this second check rejects mismatched / hostile filenames.

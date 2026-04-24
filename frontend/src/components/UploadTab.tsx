@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { api } from "../api";
-import { Upload, CheckCircle, AlertCircle, Loader2, RefreshCw } from "lucide-react";
+import { Upload, CheckCircle, AlertCircle, Loader2, RefreshCw, FileText, X } from "lucide-react";
 
 const UTILITY_ICONS: Record<string, string> = {
   electricity: "⚡",
@@ -12,27 +12,39 @@ const UTILITY_ICONS: Record<string, string> = {
   other: "📄",
 };
 
+const MAX_FILE_BYTES = 25 * 1024 * 1024; // 25 MB — must match backend MAX_UPLOAD_BYTES
+const MAX_FILE_MB = MAX_FILE_BYTES / (1024 * 1024);
+
 interface UploadTabProps {
   onSuccess: () => void;
 }
 
-type Status = "idle" | "uploading" | "success" | "replaced" | "error";
+type ItemStatus = "pending" | "uploading" | "success" | "replaced" | "error" | "low_quality" | "too_large";
 type ParserMode = "tesseract" | "openrouter";
 
-// Fallback list if the backend can't fetch the live list from OpenRouter.
-// The live list comes from GET /api/openrouter-models and is fetched on
-// mount — OpenRouter changes their free tier often enough that a hardcoded
-// list goes stale within weeks.
+interface QueueItem {
+  id: string;
+  file: File;
+  status: ItemStatus;
+  errorMsg?: string;
+  parsed?: Record<string, unknown>;
+}
+
 const FALLBACK_MODELS = [
   { id: "google/gemini-2.0-flash-exp:free", label: "Gemini 2.0 Flash" },
   { id: "__custom__", label: "Custom model ID…" },
 ];
 
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 export default function UploadTab({ onSuccess }: UploadTabProps) {
   const [dragging, setDragging] = useState(false);
-  const [status, setStatus] = useState<Status>("idle");
-  const [parsed, setParsed] = useState<Record<string, unknown> | null>(null);
-  const [errorMsg, setErrorMsg] = useState("");
+  const [queue, setQueue] = useState<QueueItem[]>([]);
+  const [running, setRunning] = useState(false);
   const [parserMode, setParserMode] = useState<ParserMode>("openrouter");
   const [availableModels, setAvailableModels] = useState(FALLBACK_MODELS);
   const [selectedModel, setSelectedModel] = useState(FALLBACK_MODELS[0].id);
@@ -51,7 +63,7 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
         if (live.length > 0) setSelectedModel(live[0].id);
       })
       .catch(() => {
-        // Backend unreachable or failed — fallback list is already in state.
+        // Backend unreachable — keep fallback list.
       })
       .finally(() => {
         if (!cancelled) setModelsLoading(false);
@@ -59,40 +71,92 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
     return () => { cancelled = true; };
   }, []);
 
-  const handleFile = useCallback(async (file: File) => {
-    setStatus("uploading");
-    setParsed(null);
-    setErrorMsg("");
-    try {
-      const effectiveModel =
-        parserMode === "openrouter"
-          ? (selectedModel === "__custom__" ? customModel.trim() : selectedModel)
-          : undefined;
-      const res = await api.uploadBill(file, parserMode, effectiveModel || undefined);
-      setParsed(res.data.parsed);
-      setStatus(res.data.replaced ? "replaced" : "success");
-      // If parsing failed, keep the user on this tab so they can read the
-      // error and pick a different model. They can navigate to Bills manually.
-      if (!res.data.parsed?._low_quality) {
-        setTimeout(onSuccess, 2000);
+  const updateItem = useCallback((id: string, patch: Partial<QueueItem>) => {
+    setQueue(q => q.map(it => (it.id === id ? { ...it, ...patch } : it)));
+  }, []);
+
+  const processQueue = useCallback(async (items: QueueItem[]) => {
+    setRunning(true);
+    const effectiveModel =
+      parserMode === "openrouter"
+        ? (selectedModel === "__custom__" ? customModel.trim() : selectedModel)
+        : undefined;
+
+    let successCount = 0;
+    let problemCount = 0;
+    for (const item of items) {
+      if (item.status !== "pending") continue;
+      updateItem(item.id, { status: "uploading" });
+      try {
+        const res = await api.uploadBill(item.file, parserMode, effectiveModel || undefined);
+        const parsed = res.data.parsed;
+        const lowQuality = Boolean(parsed?._low_quality);
+        if (lowQuality) {
+          problemCount += 1;
+          updateItem(item.id, { status: "low_quality", parsed });
+        } else {
+          successCount += 1;
+          updateItem(item.id, { status: res.data.replaced ? "replaced" : "success", parsed });
+        }
+      } catch (e: unknown) {
+        problemCount += 1;
+        const msg = e instanceof Error ? e.message : "Upload failed";
+        updateItem(item.id, { status: "error", errorMsg: msg });
       }
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "Upload failed";
-      setErrorMsg(msg);
-      setStatus("error");
     }
-  }, [onSuccess, parserMode, selectedModel, customModel]);
+    setRunning(false);
+    // Auto-navigate only if everything went smoothly (no errors, no low quality).
+    if (successCount > 0 && problemCount === 0) {
+      setTimeout(onSuccess, 2000);
+    }
+  }, [parserMode, selectedModel, customModel, updateItem, onSuccess]);
+
+  const addFiles = useCallback((files: File[]) => {
+    if (files.length === 0) return;
+    const items: QueueItem[] = files.map(file => {
+      const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      if (file.size > MAX_FILE_BYTES) {
+        return {
+          id,
+          file,
+          status: "too_large",
+          errorMsg: `File too large (${formatBytes(file.size)}). Maximum size is ${MAX_FILE_MB} MB per file.`,
+        };
+      }
+      return { id, file, status: "pending" };
+    });
+    setQueue(items);
+    const toUpload = items.filter(it => it.status === "pending");
+    if (toUpload.length > 0) {
+      // Defer to next tick so React commits the queue first — otherwise the
+      // first file's "uploading" status overwrites the initial render.
+      setTimeout(() => processQueue(toUpload), 0);
+    }
+  }, [processQueue]);
 
   const onDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setDragging(false);
-    const file = e.dataTransfer.files[0];
-    if (file) handleFile(file);
-  }, [handleFile]);
+    if (running) return;
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length > 0) addFiles(files);
+  }, [addFiles, running]);
 
   const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) handleFile(file);
+    const files = Array.from(e.target.files ?? []);
+    if (files.length > 0) addFiles(files);
+    // Reset so re-selecting the same file fires onChange again.
+    e.target.value = "";
+  };
+
+  const removeItem = (id: string) => {
+    if (running) return;
+    setQueue(q => q.filter(it => it.id !== id));
+  };
+
+  const clearAll = () => {
+    if (running) return;
+    setQueue([]);
   };
 
   const cardStyle = {
@@ -102,13 +166,19 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
     padding: 24,
   };
 
-  const isSuccess = status === "success" || status === "replaced";
+  const allDone = queue.length > 0 && queue.every(it => it.status !== "pending" && it.status !== "uploading");
+  const singleSuccess = queue.length === 1 && (queue[0].status === "success" || queue[0].status === "replaced" || queue[0].status === "low_quality");
+  const detailItem = singleSuccess ? queue[0] : null;
+  const parsed = detailItem?.parsed;
+
+  const successCount = queue.filter(it => it.status === "success" || it.status === "replaced").length;
+  const problemCount = queue.filter(it => it.status === "error" || it.status === "low_quality" || it.status === "too_large").length;
 
   return (
     <div style={{ maxWidth: 640, margin: "0 auto" }}>
       <h2 style={{ color: "white", marginBottom: 8, fontSize: 22 }}>Upload Invoice / Bill</h2>
       <p style={{ color: "#9ca3af", marginBottom: 16, fontSize: 14 }}>
-        Choose how to extract data from your invoice, then drop or select the file.
+        Drop one or more files (up to {MAX_FILE_MB} MB each) to extract data.
       </p>
 
       {/* Parser selector */}
@@ -124,14 +194,16 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
             <button
               key={id}
               onClick={() => setParserMode(id)}
+              disabled={running}
               style={{
                 flex: 1,
                 background: parserMode === id ? "#1e2640" : "#252838",
                 border: `1.5px solid ${parserMode === id ? "#2563eb" : "#374151"}`,
                 borderRadius: 8,
                 padding: "10px 12px",
-                cursor: "pointer",
+                cursor: running ? "not-allowed" : "pointer",
                 textAlign: "left",
+                opacity: running ? 0.6 : 1,
               }}
             >
               <div style={{ color: parserMode === id ? "#93c5fd" : "#e5e7eb", fontSize: 13, fontWeight: 600 }}>{label}</div>
@@ -148,7 +220,7 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
             <select
               value={selectedModel}
               onChange={(e) => setSelectedModel(e.target.value)}
-              disabled={modelsLoading}
+              disabled={modelsLoading || running}
               style={{
                 width: "100%",
                 background: "#252838",
@@ -157,8 +229,8 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
                 color: "#e5e7eb",
                 padding: "7px 10px",
                 fontSize: 13,
-                cursor: modelsLoading ? "wait" : "pointer",
-                opacity: modelsLoading ? 0.6 : 1,
+                cursor: modelsLoading || running ? "not-allowed" : "pointer",
+                opacity: modelsLoading || running ? 0.6 : 1,
               }}
             >
               {availableModels.map(m => (
@@ -171,6 +243,7 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
                 value={customModel}
                 onChange={(e) => setCustomModel(e.target.value)}
                 placeholder="e.g. mistralai/pixtral-12b:free"
+                disabled={running}
                 style={{
                   width: "100%",
                   background: "#252838",
@@ -194,77 +267,91 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
         )}
       </div>
 
-      <div
-        onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
-        onDragLeave={() => setDragging(false)}
-        onDrop={onDrop}
-        style={{
-          ...cardStyle,
-          border: `2px dashed ${dragging ? "#2563eb" : "#374151"}`,
-          background: dragging ? "#1e2640" : "#1a1d27",
-          textAlign: "center",
-          padding: "48px 24px",
-          cursor: "pointer",
-          transition: "all 0.15s",
-        }}
-        onClick={() => fileInputRef.current?.click()}
-      >
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*,.pdf"
-          style={{ display: "none" }}
-          onChange={onFileChange}
-        />
-        {status === "uploading" ? (
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
-            <Loader2 size={40} color="#2563eb" style={{ animation: "spin 1s linear infinite" }} />
-            <p style={{ color: "#9ca3af", margin: 0 }}>
-              {parserMode === "openrouter" ? "Sending to AI model…" : "Running OCR & extracting line items…"}
-            </p>
-          </div>
-        ) : status === "replaced" ? (
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
-            <RefreshCw size={40} color="#f59e0b" />
-            <p style={{ color: "#f59e0b", margin: 0, fontWeight: 600 }}>Existing bill replaced</p>
-            <p style={{ color: "#9ca3af", margin: 0, fontSize: 13 }}>Duplicate detected — previous entry updated</p>
-          </div>
-        ) : status === "success" ? (
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
-            {parsed?._low_quality ? (
-              <>
-                <AlertCircle size={40} color="#f59e0b" />
-                <p style={{ color: "#f59e0b", margin: 0, fontWeight: 600 }}>File saved, but data couldn't be extracted</p>
-                <p style={{ color: "#9ca3af", margin: 0, fontSize: 13 }}>See details below — try a different model or upload again</p>
-              </>
-            ) : (
-              <>
-                <CheckCircle size={40} color="#22c55e" />
-                <p style={{ color: "#22c55e", margin: 0, fontWeight: 600 }}>Bill uploaded successfully!</p>
-                <p style={{ color: "#9ca3af", margin: 0, fontSize: 13 }}>Redirecting to bills list…</p>
-              </>
-            )}
-          </div>
-        ) : status === "error" ? (
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
-            <AlertCircle size={40} color="#ef4444" />
-            <p style={{ color: "#ef4444", margin: 0 }}>{errorMsg}</p>
-            <p style={{ color: "#9ca3af", margin: 0, fontSize: 13 }}>Click to try again</p>
-          </div>
-        ) : (
+      {/* Drop zone — hidden once the queue has items so the queue takes over the visual focus. */}
+      {queue.length === 0 && (
+        <div
+          onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={onDrop}
+          style={{
+            ...cardStyle,
+            border: `2px dashed ${dragging ? "#2563eb" : "#374151"}`,
+            background: dragging ? "#1e2640" : "#1a1d27",
+            textAlign: "center",
+            padding: "48px 24px",
+            cursor: "pointer",
+            transition: "all 0.15s",
+          }}
+          onClick={() => fileInputRef.current?.click()}
+        >
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*,.pdf"
+            multiple
+            style={{ display: "none" }}
+            onChange={onFileChange}
+          />
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
             <div style={{ width: 64, height: 64, background: "#1e2640", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center" }}>
               <Upload size={28} color="#2563eb" />
             </div>
             <div>
-              <p style={{ color: "white", margin: 0, fontWeight: 600 }}>Drop your bill here</p>
-              <p style={{ color: "#9ca3af", margin: "4px 0 0", fontSize: 13 }}>or click to browse — JPG, PNG, PDF supported</p>
+              <p style={{ color: "white", margin: 0, fontWeight: 600 }}>Drop your bills here</p>
+              <p style={{ color: "#9ca3af", margin: "4px 0 0", fontSize: 13 }}>
+                or click to browse — multiple files allowed, up to {MAX_FILE_MB} MB each
+              </p>
             </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
-      {isSuccess && parsed && Boolean(parsed._low_quality) && (
+      {/* Upload queue */}
+      {queue.length > 0 && (
+        <div style={{ ...cardStyle, padding: 16 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+            <div style={{ color: "white", fontSize: 14, fontWeight: 600 }}>
+              {running ? `Processing ${queue.length} file${queue.length === 1 ? "" : "s"}…` : `${queue.length} file${queue.length === 1 ? "" : "s"}`}
+              {!running && allDone && (
+                <span style={{ color: "#6b7280", fontWeight: 400, marginLeft: 8 }}>
+                  · {successCount} succeeded{problemCount > 0 ? `, ${problemCount} with issues` : ""}
+                </span>
+              )}
+            </div>
+            {allDone && !running && (
+              <button
+                onClick={clearAll}
+                style={{
+                  background: "transparent",
+                  border: "1px solid #374151",
+                  borderRadius: 6,
+                  color: "#9ca3af",
+                  padding: "5px 10px",
+                  fontSize: 12,
+                  cursor: "pointer",
+                }}
+              >
+                Upload more
+              </button>
+            )}
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {queue.map(item => (
+              <QueueRow key={item.id} item={item} onRemove={removeItem} disabled={running} />
+            ))}
+          </div>
+          {allDone && successCount > 0 && (
+            <div style={{ marginTop: 12, fontSize: 12, color: "#9ca3af" }}>
+              {problemCount === 0
+                ? "Redirecting to bills list…"
+                : <>Some files had issues — you can fix them and try again, or <button onClick={onSuccess} style={{ background: "transparent", border: "none", color: "#93c5fd", cursor: "pointer", padding: 0, fontSize: 12, textDecoration: "underline" }}>view bills</button>.</>}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Detail panel — only when exactly one file was processed. */}
+      {detailItem && parsed && Boolean(parsed._low_quality) && (
         <div style={{
           ...cardStyle,
           marginTop: 24,
@@ -304,7 +391,7 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
         </div>
       )}
 
-      {isSuccess && parsed && Array.isArray(parsed._models_tried) && parsed._models_tried.length > 0 && parsed._model_used ? (
+      {detailItem && parsed && Array.isArray(parsed._models_tried) && parsed._models_tried.length > 0 && parsed._model_used ? (
         <div style={{
           ...cardStyle,
           marginTop: 16,
@@ -321,7 +408,7 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
         </div>
       ) : null}
 
-      {isSuccess && parsed && (
+      {detailItem && parsed && (
         <>
           <div style={{ ...cardStyle, marginTop: 24 }}>
             <h3 style={{ color: "white", margin: "0 0 16px", fontSize: 16 }}>
@@ -437,6 +524,90 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
       </div>
 
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+    </div>
+  );
+}
+
+interface QueueRowProps {
+  item: QueueItem;
+  onRemove: (id: string) => void;
+  disabled: boolean;
+}
+
+function QueueRow({ item, onRemove, disabled }: QueueRowProps) {
+  const { status, file, errorMsg } = item;
+  const StatusIcon = (() => {
+    switch (status) {
+      case "uploading": return <Loader2 size={16} color="#2563eb" style={{ animation: "spin 1s linear infinite" }} />;
+      case "success": return <CheckCircle size={16} color="#22c55e" />;
+      case "replaced": return <RefreshCw size={16} color="#f59e0b" />;
+      case "low_quality": return <AlertCircle size={16} color="#f59e0b" />;
+      case "error":
+      case "too_large": return <AlertCircle size={16} color="#ef4444" />;
+      default: return <FileText size={16} color="#6b7280" />;
+    }
+  })();
+  const statusLabel = (() => {
+    switch (status) {
+      case "pending": return "Queued";
+      case "uploading": return "Uploading…";
+      case "success": return "Uploaded";
+      case "replaced": return "Replaced existing bill";
+      case "low_quality": return "Saved — extraction failed";
+      case "error": return errorMsg || "Upload failed";
+      case "too_large": return errorMsg || `File too large — max ${MAX_FILE_MB} MB`;
+    }
+  })();
+  const statusColor = (() => {
+    switch (status) {
+      case "success": return "#22c55e";
+      case "replaced":
+      case "low_quality": return "#f59e0b";
+      case "error":
+      case "too_large": return "#ef4444";
+      case "uploading": return "#93c5fd";
+      default: return "#9ca3af";
+    }
+  })();
+  const canRemove = !disabled && status !== "uploading";
+  return (
+    <div style={{
+      display: "flex",
+      alignItems: "center",
+      gap: 10,
+      padding: "8px 10px",
+      background: "#252838",
+      borderRadius: 8,
+      border: status === "error" || status === "too_large" ? "1px solid #ef4444" : "1px solid transparent",
+    }}>
+      <div style={{ flexShrink: 0 }}>{StatusIcon}</div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ color: "#e5e7eb", fontSize: 13, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {file.name}
+        </div>
+        <div style={{ color: statusColor, fontSize: 11, marginTop: 1 }}>
+          {formatBytes(file.size)} · {statusLabel}
+        </div>
+      </div>
+      {canRemove && (
+        <button
+          onClick={() => onRemove(item.id)}
+          title="Remove"
+          style={{
+            background: "transparent",
+            border: "none",
+            color: "#6b7280",
+            cursor: "pointer",
+            padding: 4,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            flexShrink: 0,
+          }}
+        >
+          <X size={14} />
+        </button>
+      )}
     </div>
   );
 }

@@ -188,7 +188,7 @@ Backend env vars (see `backend/.env.example` for the full list):
 - `PARSER_BACKEND=claude` — Anthropic Claude API, requires `ANTHROPIC_API_KEY` (paid). Highest accuracy; use only if the free OpenRouter models aren't getting the job done.
 - `APP_PASSWORD` — optional shared-password login gate. Unset = no login required.
 - `AUTH_SECRET` — required when `APP_PASSWORD` is set. 64-char hex, generate with `python -c "import secrets; print(secrets.token_hex(32))"`.
-- `MAX_UPLOAD_BYTES` — hard cap on upload size in bytes (default 20 MB).
+- `MAX_UPLOAD_BYTES` — hard cap on upload size in bytes per file (default 25 MB). Multi-file uploads are supported; each file is bounded by this limit.
 - `DB_PATH`, `UPLOADS_DIR`, `LOG_LEVEL` — override storage paths and log verbosity.
 
 Frontend env var (see `frontend/.env.example`):
