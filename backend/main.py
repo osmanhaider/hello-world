@@ -177,29 +177,103 @@ async def upload_bill(file: UploadFile = File(...)):
         parsed = {"error": str(e), "_source": PARSER_BACKEND}
 
     now = datetime.utcnow().isoformat()
+    provider = parsed.get("provider")
+    period_start = parsed.get("period_start")
+    account_number = parsed.get("account_number")
+
+    replaced = False
+    replaced_id: Optional[str] = None
+
     async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute("""
-            INSERT INTO bills (id, filename, upload_date, bill_date, provider, utility_type,
-                amount_eur, consumption_kwh, consumption_m3, period_start, period_end,
-                account_number, address, raw_json)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            bill_id, file.filename, now,
-            parsed.get("bill_date"),
-            parsed.get("provider"),
-            parsed.get("utility_type"),
-            parsed.get("amount_eur"),
-            parsed.get("consumption_kwh"),
-            parsed.get("consumption_m3"),
-            parsed.get("period_start"),
-            parsed.get("period_end"),
-            parsed.get("account_number"),
-            parsed.get("address"),
-            json.dumps(parsed)
-        ))
+        # Look for an existing bill matching the same provider + service period
+        # (or same invoice number if period isn't available).
+        existing_row = None
+        if provider and period_start:
+            async with db.execute(
+                "SELECT id, filename FROM bills "
+                "WHERE provider = ? AND period_start = ? "
+                "ORDER BY upload_date DESC LIMIT 1",
+                (provider, period_start),
+            ) as c:
+                existing_row = await c.fetchone()
+        elif provider and account_number:
+            async with db.execute(
+                "SELECT id, filename FROM bills "
+                "WHERE provider = ? AND account_number = ? "
+                "ORDER BY upload_date DESC LIMIT 1",
+                (provider, account_number),
+            ) as c:
+                existing_row = await c.fetchone()
+
+        if existing_row:
+            # Overwrite the matching row in place. Keep its id so any links hold.
+            replaced = True
+            replaced_id = existing_row[0]
+            old_filename = existing_row[1]
+            # Delete the previously stored file if it was a different one
+            if old_filename:
+                for ext_try in ("pdf", "png", "jpg", "jpeg", "gif", "webp"):
+                    old_path = os.path.join(UPLOADS_DIR, f"{replaced_id}.{ext_try}")
+                    if os.path.exists(old_path) and old_path != save_path:
+                        try:
+                            os.remove(old_path)
+                        except OSError:
+                            pass
+            # Also rename the newly uploaded file to use the original id so paths stay stable
+            new_path = os.path.join(UPLOADS_DIR, f"{replaced_id}.{ext}")
+            if new_path != save_path:
+                try:
+                    os.replace(save_path, new_path)
+                    save_path = new_path
+                except OSError:
+                    pass
+            bill_id = replaced_id
+
+            await db.execute("""
+                UPDATE bills SET
+                    filename = ?, upload_date = ?, bill_date = ?, provider = ?,
+                    utility_type = ?, amount_eur = ?, consumption_kwh = ?,
+                    consumption_m3 = ?, period_start = ?, period_end = ?,
+                    account_number = ?, address = ?, raw_json = ?
+                WHERE id = ?
+            """, (
+                file.filename, now,
+                parsed.get("bill_date"),
+                parsed.get("provider"),
+                parsed.get("utility_type"),
+                parsed.get("amount_eur"),
+                parsed.get("consumption_kwh"),
+                parsed.get("consumption_m3"),
+                parsed.get("period_start"),
+                parsed.get("period_end"),
+                parsed.get("account_number"),
+                parsed.get("address"),
+                json.dumps(parsed),
+                replaced_id,
+            ))
+        else:
+            await db.execute("""
+                INSERT INTO bills (id, filename, upload_date, bill_date, provider, utility_type,
+                    amount_eur, consumption_kwh, consumption_m3, period_start, period_end,
+                    account_number, address, raw_json)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                bill_id, file.filename, now,
+                parsed.get("bill_date"),
+                parsed.get("provider"),
+                parsed.get("utility_type"),
+                parsed.get("amount_eur"),
+                parsed.get("consumption_kwh"),
+                parsed.get("consumption_m3"),
+                parsed.get("period_start"),
+                parsed.get("period_end"),
+                parsed.get("account_number"),
+                parsed.get("address"),
+                json.dumps(parsed),
+            ))
         await db.commit()
 
-    return {"id": bill_id, "parsed": parsed}
+    return {"id": bill_id, "parsed": parsed, "replaced": replaced}
 
 
 @app.get("/api/bills")

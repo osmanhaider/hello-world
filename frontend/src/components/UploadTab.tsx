@@ -22,15 +22,18 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
   const [dragging, setDragging] = useState(false);
   const [status, setStatus] = useState<Status>("idle");
   const [parsed, setParsed] = useState<Record<string, unknown> | null>(null);
+  const [replaced, setReplaced] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
   const handleFile = useCallback(async (file: File) => {
     setStatus("uploading");
     setParsed(null);
+    setReplaced(false);
     setErrorMsg("");
     try {
       const res = await api.uploadBill(file);
       setParsed(res.data.parsed);
+      setReplaced(Boolean(res.data.replaced));
       setStatus("success");
       setTimeout(onSuccess, 2000);
     } catch (e: unknown) {
@@ -95,9 +98,15 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
           </div>
         ) : status === "success" ? (
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
-            <CheckCircle size={40} color="#22c55e" />
-            <p style={{ color: "#22c55e", margin: 0, fontWeight: 600 }}>Bill uploaded successfully!</p>
-            <p style={{ color: "#9ca3af", margin: 0, fontSize: 13 }}>Redirecting to bills list…</p>
+            <CheckCircle size={40} color={replaced ? "#f59e0b" : "#22c55e"} />
+            <p style={{ color: replaced ? "#f59e0b" : "#22c55e", margin: 0, fontWeight: 600 }}>
+              {replaced ? "Existing bill replaced" : "Bill uploaded successfully!"}
+            </p>
+            <p style={{ color: "#9ca3af", margin: 0, fontSize: 13, textAlign: "center" }}>
+              {replaced
+                ? "A previous bill for this provider and period already existed — it has been overwritten with the new file."
+                : "Redirecting to bills list…"}
+            </p>
           </div>
         ) : status === "error" ? (
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>

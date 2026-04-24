@@ -93,7 +93,7 @@ export const api = {
   uploadBill: (file: File) => {
     const fd = new FormData();
     fd.append("file", file);
-    return axios.post<{ id: string; parsed: Record<string, unknown> }>(`${BASE}/api/bills/upload`, fd);
+    return axios.post<{ id: string; parsed: Record<string, unknown>; replaced: boolean }>(`${BASE}/api/bills/upload`, fd);
   },
   listBills: () => axios.get<Bill[]>(`${BASE}/api/bills`),
   deleteBill: (id: string) => axios.delete(`${BASE}/api/bills/${id}`),
