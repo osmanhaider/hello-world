@@ -63,10 +63,10 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
 
   return (
     <div style={{ maxWidth: 640, margin: "0 auto" }}>
-      <h2 style={{ color: "white", marginBottom: 8, fontSize: 22 }}>Upload Utility Bill</h2>
+      <h2 style={{ color: "white", marginBottom: 8, fontSize: 22 }}>Upload Invoice / Bill</h2>
       <p style={{ color: "#9ca3af", marginBottom: 24, fontSize: 14 }}>
-        Tesseract OCR + pdfplumber extract every line item locally — no API key needed.
-        Supports korteriühistu invoices and individual utility bills.
+        Tesseract OCR + pdfplumber extract line items locally — no API key needed.
+        For best results on complex or non-standard invoices, set <code style={{ background: "#252838", padding: "1px 5px", borderRadius: 4, fontSize: 12 }}>PARSER_BACKEND=claude</code>.
       </p>
 
       <div
@@ -127,6 +127,31 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
         )}
       </div>
 
+      {isSuccess && parsed && parsed._low_quality && (
+        <div style={{
+          ...cardStyle,
+          marginTop: 24,
+          borderLeft: "3px solid #f59e0b",
+          background: "#1f1a0e",
+          display: "flex",
+          gap: 12,
+          alignItems: "flex-start",
+        }}>
+          <AlertCircle size={20} color="#f59e0b" style={{ flexShrink: 0, marginTop: 1 }} />
+          <div>
+            <div style={{ color: "#f59e0b", fontWeight: 600, fontSize: 14, marginBottom: 4 }}>
+              OCR couldn't read this invoice
+            </div>
+            <div style={{ color: "#d1d5db", fontSize: 13, lineHeight: 1.5 }}>
+              The local Tesseract parser found very little data — this usually means the invoice
+              layout or language doesn't match the built-in patterns. For accurate extraction and
+              line items, set <code style={{ background: "#252838", padding: "1px 5px", borderRadius: 4 }}>PARSER_BACKEND=claude</code> and
+              re-upload. Claude can read any invoice format, language, or layout.
+            </div>
+          </div>
+        </div>
+      )}
+
       {isSuccess && parsed && (
         <>
           <div style={{ ...cardStyle, marginTop: 24 }}>
@@ -167,11 +192,11 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
 
           {Array.isArray(parsed.line_items) && parsed.line_items.length > 0 ? (
             <div style={{ ...cardStyle, marginTop: 16 }}>
-              <h3 style={{ color: "white", margin: "0 0 12px", fontSize: 14 }}>Line Items (Estonian → English)</h3>
+              <h3 style={{ color: "white", margin: "0 0 12px", fontSize: 14 }}>Line Items</h3>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                 <thead>
                   <tr style={{ borderBottom: "1px solid #2d3148" }}>
-                    <th style={{ padding: "8px 0", textAlign: "left", color: "#6b7280", fontSize: 11, textTransform: "uppercase", fontWeight: 600 }}>Estonian</th>
+                    <th style={{ padding: "8px 0", textAlign: "left", color: "#6b7280", fontSize: 11, textTransform: "uppercase", fontWeight: 600 }}>Description</th>
                     <th style={{ padding: "8px 0", textAlign: "left", color: "#6b7280", fontSize: 11, textTransform: "uppercase", fontWeight: 600 }}>English</th>
                     <th style={{ padding: "8px 0", textAlign: "right", color: "#6b7280", fontSize: 11, textTransform: "uppercase", fontWeight: 600 }}>Amount</th>
                   </tr>
@@ -209,42 +234,20 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
       )}
 
       <div style={{ ...cardStyle, marginTop: 24 }}>
-        <h3 style={{ color: "white", margin: "0 0 4px", fontSize: 14 }}>Supported Estonian Providers</h3>
-        <p style={{ color: "#6b7280", fontSize: 12, margin: "0 0 12px" }}>Works with any Estonian utility bill. Best accuracy with PDF invoices.</p>
+        <h3 style={{ color: "white", margin: "0 0 4px", fontSize: 14 }}>Supported Invoice Types</h3>
+        <p style={{ color: "#6b7280", fontSize: 12, margin: "0 0 12px" }}>
+          Any invoice or bill can be uploaded. Local OCR works best with standard-layout PDF invoices.
+          Use <code style={{ background: "#252838", padding: "1px 4px", borderRadius: 3 }}>PARSER_BACKEND=claude</code> for
+          non-standard layouts or any language.
+        </p>
 
         <div style={{ marginBottom: 10 }}>
           <div style={{ fontSize: 11, color: "#2563eb", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6, fontWeight: 600 }}>
-            Housing Associations
+            Utility Bills (best OCR accuracy)
           </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-            {["Korteriühistu (any)", "Building Management"].map(p => (
+            {["Electricity", "Gas", "Water", "Heating", "Internet / Telecom", "Waste Collection", "Housing Association"].map(p => (
               <span key={p} style={{ background: "#1e2640", border: "1px solid #2563eb", borderRadius: 6, padding: "4px 10px", fontSize: 12, color: "#93c5fd" }}>
-                {p}
-              </span>
-            ))}
-          </div>
-        </div>
-
-        <div style={{ marginBottom: 10 }}>
-          <div style={{ fontSize: 11, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>
-            Electricity &amp; Gas
-          </div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-            {["Eesti Energia", "Elektrilevi", "Elering", "Eesti Gaas", "Gasum"].map(p => (
-              <span key={p} style={{ background: "#252838", border: "1px solid #374151", borderRadius: 6, padding: "4px 10px", fontSize: 12, color: "#d1d5db" }}>
-                {p}
-              </span>
-            ))}
-          </div>
-        </div>
-
-        <div style={{ marginBottom: 10 }}>
-          <div style={{ fontSize: 11, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>
-            Water, Heating &amp; Telecom
-          </div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-            {["Tallinna Vesi", "Adven", "Utilitas", "Gren", "Telia", "Elisa", "Tele2"].map(p => (
-              <span key={p} style={{ background: "#252838", border: "1px solid #374151", borderRadius: 6, padding: "4px 10px", fontSize: 12, color: "#d1d5db" }}>
                 {p}
               </span>
             ))}
@@ -253,10 +256,10 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
 
         <div>
           <div style={{ fontSize: 11, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>
-            Waste Collection
+            Any invoice (Claude backend)
           </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-            {["Ragn-Sells", "STS", "Eesti Keskkonnateenused"].map(p => (
+            {["Rent", "Subscriptions", "Services", "Repairs", "Insurance", "Any format or language"].map(p => (
               <span key={p} style={{ background: "#252838", border: "1px solid #374151", borderRadius: 6, padding: "4px 10px", fontSize: 12, color: "#d1d5db" }}>
                 {p}
               </span>
