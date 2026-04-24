@@ -4,21 +4,24 @@
 ![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)
 ![Node 18+](https://img.shields.io/badge/node-18%2B-green)
 
-Upload monthly utility bills (images or PDFs), get them parsed and translated from Estonian to English automatically, and explore spending patterns through a 12-section analytics dashboard.
+Upload any invoice or bill (image or PDF), get it parsed into structured line items, and explore spending patterns through a 12-section analytics dashboard.
 
-Runs **entirely locally** — no API key required.
+Two extraction backends are available:
+- **Local OCR** *(default)* — Tesseract + `pdfplumber`, optimized for Estonian utility bills. Runs entirely locally, no API key required.
+- **Claude API** *(optional)* — handles any invoice type, any language, any layout. Set `PARSER_BACKEND=claude`.
 
 ## Features
 
-- **Open-source extraction**: Tesseract OCR for images, `pdfplumber` for native-text PDFs, `pdf2image` + OCR fallback for scanned PDFs
-- **Hardcoded Estonian→English dictionary** (~180 terms) — no API call needed for translation
+- **Two extraction backends** — local OCR for Estonian utility bills, Claude API for anything else (rent, subscriptions, services, non-Estonian invoices, scanned docs with unusual layouts)
+- **Automatic quality detection** — if the local OCR can't read the invoice, the UI shows a warning banner directing the user to switch to the Claude backend
+- **Open-source OCR pipeline**: Tesseract for images, `pdfplumber` for native-text PDFs, `pdf2image` + OCR fallback for scanned PDFs
+- **Hardcoded Estonian→English dictionary** (~180 terms) — no API call needed for translation when using the local backend
   - Utility services: electricity, gas, water, heating, telecom, waste
   - Korteriühistu line items: Haldusteenus, Küte, Remondifond, Tehnosüsteemide hooldusteenus…
   - Months (Jaanuar → January), weekdays, units, invoice field labels
   - Inline meter-reading format: `Alg: 9644 Löpp: 9726` → `[Start: 9644, End: 9726]`
 - **12-section analytics dashboard** with trends, MoM/YoY %, unit-price tracking, price-vs-consumption decomposition
-- **One-click PDF export** of the whole dashboard (client-side, no server round-trip)
-- **Optional Claude API fallback** for higher-accuracy extraction, toggled by `PARSER_BACKEND=claude`
+- **One-click PDF export** of the whole dashboard (client-side, no server round-trip) — paginates at chart boundaries so charts are never split mid-body
 
 ## Architecture
 
@@ -110,8 +113,8 @@ python3 -m venv venv
 Backend is now at **http://localhost:8000**.
 
 Backend env vars:
-- `PARSER_BACKEND=tesseract` *(default)* — open-source, local, no API key
-- `PARSER_BACKEND=claude` — Anthropic Claude API, requires `ANTHROPIC_API_KEY`
+- `PARSER_BACKEND=tesseract` *(default)* — open-source, local, no API key. Best on Estonian utility bills and korteriühistu invoices.
+- `PARSER_BACKEND=claude` — Anthropic Claude API, requires `ANTHROPIC_API_KEY`. Works on any invoice format, any language, any layout — use this if the Tesseract parser shows a low-quality warning for your invoice.
 
 ### 4. Start the frontend (in a second terminal)
 
@@ -125,7 +128,7 @@ Open **http://localhost:5173** in your browser. You'll see three tabs: **Upload*
 
 ### 5. Try it
 
-1. Go to **Upload** → drag in a PDF or image of an Estonian utility bill → the parser extracts line items and translates them on the spot.
+1. Go to **Upload** → drag in a PDF or image of your invoice. The local parser handles Estonian utility bills out of the box; for any other format, an amber warning will suggest switching to the Claude backend.
 2. Open the **Bills** tab to see everything stored with expandable per-bill details.
 3. Open **Analytics** to explore 12 dashboard sections — click **Download PDF** to export.
 
@@ -153,6 +156,9 @@ Something else is on port 8000. Either kill it (`lsof -ti:8000 | xargs kill`) or
 
 **Dashboard shows no data**
 Either no bills uploaded yet, or the backend isn't running. Check the **Upload** tab works, or run `python seed_demo.py` to load three sample bills.
+
+**Amber "OCR couldn't read this invoice" warning**
+The local Tesseract parser couldn't extract enough data — typically means the invoice is non-Estonian, has an unusual layout, or is a low-quality scan. Restart the backend with `PARSER_BACKEND=claude ANTHROPIC_API_KEY=sk-ant-... ./venv/bin/uvicorn main:app --port 8000` and re-upload.
 
 ## Parser accuracy
 
