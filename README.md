@@ -22,6 +22,7 @@ Two extraction backends are available:
   - Inline meter-reading format: `Alg: 9644 Löpp: 9726` → `[Start: 9644, End: 9726]`
 - **12-section analytics dashboard** with trends, MoM/YoY %, unit-price tracking, price-vs-consumption decomposition
 - **One-click PDF export** of the whole dashboard (client-side, no server round-trip) — paginates at chart boundaries so charts are never split mid-body
+- **Optional shared-password login** gate for deployed instances (disabled by default for local dev)
 
 ## Architecture
 
@@ -57,7 +58,7 @@ Open **http://localhost:5173**. Uploads and the SQLite DB are persisted in a nam
 
 A free-tier cloud setup: **Vercel** for the frontend, **Render** for the backend.
 
-> ⚠️ The API has no authentication. Anyone with the Render URL can upload bills and delete records. Treat any deployment as a personal demo, not a shared service.
+> ⚠️ The demo uses a **single shared password** — fine for a personal deployment but not a real multi-user product. Treat it as a personal demo, not a shared service. For a public-grade deployment, swap this for proper OAuth or Cloudflare Access.
 
 ### 1. Backend on Render
 
@@ -70,6 +71,11 @@ A free-tier cloud setup: **Vercel** for the frontend, **Render** for the backend
    - `PARSER_BACKEND` = `openrouter`
    - `OPENROUTER_API_KEY` = your key from https://openrouter.ai/keys
    - `OPENROUTER_MODEL` = `google/gemini-2.0-flash-exp:free` *(optional; overridable per upload)*
+   - `APP_PASSWORD` = any password you'll type at the login screen
+   - `AUTH_SECRET` = a long random hex string — generate locally with:
+     ```
+     python -c "import secrets; print(secrets.token_hex(32))"
+     ```
 4. Click **Create Web Service**. First build takes ~5 min. Copy the generated URL (e.g. `https://ee-utility-trackly.onrender.com`).
 
 The free tier spins down after 15 minutes of inactivity. The first request after a cold start takes ~30 s. The SQLite DB lives on the ephemeral disk and resets on every redeploy — for persistence, migrate to Supabase Postgres.
@@ -92,6 +98,12 @@ The backend accepts requests from `*.vercel.app` by default. For a custom domain
 ```
 CORS_ALLOW_ORIGINS=https://bills.example.com,https://www.bills.example.com
 ```
+
+### 4. Login
+
+Visiting the Vercel URL will show a password prompt. Enter the `APP_PASSWORD` you set on Render. The token is stored in `localStorage` and lasts 7 days (override with `TOKEN_TTL_SEC`). To rotate the password, change `APP_PASSWORD` on Render — existing tokens stay valid until they expire unless you also rotate `AUTH_SECRET` (which invalidates every token immediately).
+
+For local development, leave `APP_PASSWORD` unset and the login screen is skipped entirely.
 
 ## Run locally
 

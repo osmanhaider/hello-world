@@ -1,6 +1,31 @@
 import axios from "axios";
+import { clearToken, getToken } from "./auth";
 
 const BASE = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
+
+// Attach the bearer token to every outgoing request (when present) and
+// log the user out automatically on 401 so a stale token can't pin the
+// UI to a broken state.
+axios.interceptors.request.use((config) => {
+  const token = getToken();
+  if (token) {
+    config.headers = config.headers ?? {};
+    config.headers["Authorization"] = `Bearer ${token}`;
+  }
+  return config;
+});
+
+axios.interceptors.response.use(
+  (r) => r,
+  (err) => {
+    if (err?.response?.status === 401) {
+      clearToken();
+      // Nudge the app to re-render; LoginScreen listens for this.
+      window.dispatchEvent(new Event("auth:logout"));
+    }
+    return Promise.reject(err);
+  },
+);
 
 export interface Bill {
   id: string;
@@ -114,4 +139,7 @@ export const api = {
     axios.get<{ models: { id: string; label: string }[]; cached?: boolean; error?: string }>(
       `${BASE}/api/openrouter-models`
     ),
+  getAuthStatus: () => axios.get<{ auth_required: boolean }>(`${BASE}/api/auth/status`),
+  login: (password: string) =>
+    axios.post<{ token: string; auth_required: boolean }>(`${BASE}/api/auth/login`, { password }),
 };

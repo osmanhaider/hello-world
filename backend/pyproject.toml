@@ -22,4 +22,4 @@ ignore = [
 # (test_parser.py, test_december.py, test_pdf.py) are stand-alone
 # integration scripts that run OCR at import time — they're kept as
 # manual smoke-tests and are not executed by CI.
-testpaths = ["test_claude_parser.py"]
+testpaths = ["test_claude_parser.py", "test_auth.py"]
