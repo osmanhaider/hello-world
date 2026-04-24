@@ -53,6 +53,46 @@ ANTHROPIC_API_KEY=sk-ant-... PARSER_BACKEND=claude docker compose up --build
 
 Open **http://localhost:5173**. Uploads and the SQLite DB are persisted in a named volume (`backend-data`).
 
+## Deploy (free tier)
+
+A free-tier cloud setup: **Vercel** for the frontend, **Render** for the backend.
+
+> ⚠️ The API has no authentication. Anyone with the Render URL can upload bills and delete records. Treat any deployment as a personal demo, not a shared service.
+
+### 1. Backend on Render
+
+1. Log in to [Render](https://render.com) → **New** → **Web Service** → pick this repo.
+2. Settings:
+   - **Root Directory**: `backend`
+   - **Environment**: `Docker` (uses `backend/Dockerfile`)
+   - **Instance Type**: `Free`
+3. Add environment variables:
+   - `PARSER_BACKEND` = `openrouter`
+   - `OPENROUTER_API_KEY` = your key from https://openrouter.ai/keys
+   - `OPENROUTER_MODEL` = `google/gemini-2.0-flash-exp:free` *(optional; overridable per upload)*
+4. Click **Create Web Service**. First build takes ~5 min. Copy the generated URL (e.g. `https://ee-utility-trackly.onrender.com`).
+
+The free tier spins down after 15 minutes of inactivity. The first request after a cold start takes ~30 s. The SQLite DB lives on the ephemeral disk and resets on every redeploy — for persistence, migrate to Supabase Postgres.
+
+### 2. Frontend on Vercel
+
+1. Log in to [Vercel](https://vercel.com) → **Add New** → **Project** → import this repo.
+2. Settings:
+   - **Root Directory**: `frontend`
+   - **Framework**: `Vite` *(auto-detected)*
+3. Environment variable:
+   - `VITE_API_URL` = the Render URL from step 1 (no trailing slash)
+4. Click **Deploy**. Your app is live at `https://<project>.vercel.app`.
+
+The bundled `frontend/vercel.json` provides SPA routing so deep links / refreshes don't 404.
+
+### 3. CORS
+
+The backend accepts requests from `*.vercel.app` by default. For a custom domain, set `CORS_ALLOW_ORIGINS` on the Render service:
+```
+CORS_ALLOW_ORIGINS=https://bills.example.com,https://www.bills.example.com
+```
+
 ## Run locally
 
 ### Prerequisites

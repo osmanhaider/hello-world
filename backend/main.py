@@ -80,9 +80,21 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Estonia Utility Bill Tracker", lifespan=lifespan)
 
+# CORS. Defaults cover local dev + any *.vercel.app deployment (each
+# preview branch gets its own hostname, so wildcarding avoids having to
+# list them). Override CORS_ALLOW_ORIGINS / CORS_ALLOW_ORIGIN_REGEX for
+# stricter production rules or to add a custom domain.
+_DEFAULT_CORS_ORIGINS = "http://localhost:5173,http://localhost:4173"
+_DEFAULT_CORS_ORIGIN_REGEX = r"https://.*\.vercel\.app"
+CORS_ALLOW_ORIGINS = [
+    o.strip() for o in os.environ.get("CORS_ALLOW_ORIGINS", _DEFAULT_CORS_ORIGINS).split(",") if o.strip()
+]
+CORS_ALLOW_ORIGIN_REGEX = os.environ.get("CORS_ALLOW_ORIGIN_REGEX", _DEFAULT_CORS_ORIGIN_REGEX) or None
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:4173"],
+    allow_origins=CORS_ALLOW_ORIGINS,
+    allow_origin_regex=CORS_ALLOW_ORIGIN_REGEX,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
