@@ -139,6 +139,7 @@ export default function BillsTab() {
                       ["Filename", bill.filename],
                       ["Uploaded", bill.upload_date?.slice(0, 10)],
                       ["Due Date", raw.due_date],
+                      ["Period (EN)", raw.period_en ?? raw.period],
                       ["VAT", raw.vat_amount != null ? `€${raw.vat_amount}` : null],
                       ["Without VAT", raw.amount_without_vat != null ? `€${raw.amount_without_vat}` : null],
                       ["Meter Start", raw.meter_reading_start],

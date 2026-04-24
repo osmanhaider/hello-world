@@ -130,7 +130,7 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
                 ["Type", parsed.utility_type],
                 ["Amount", parsed.amount_eur != null ? `€${(parsed.amount_eur as number).toFixed(2)}` : null],
                 ["Bill Date", parsed.bill_date],
-                ["Period", parsed.period_start && parsed.period_end ? `${parsed.period_start} → ${parsed.period_end}` : null],
+                ["Period", parsed.period_en ?? (parsed.period_start && parsed.period_end ? `${parsed.period_start} → ${parsed.period_end}` : parsed.period)],
                 ["Consumption", parsed.consumption_kwh != null ? `${parsed.consumption_kwh} kWh` : parsed.consumption_m3 != null ? `${parsed.consumption_m3} m³` : null],
                 ["Account", parsed.account_number],
                 ["Confidence", parsed.confidence],

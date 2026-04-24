@@ -7,6 +7,62 @@ from __future__ import annotations
 from typing import Optional
 
 # ---------------------------------------------------------------------------
+# Estonian months (lowercase keys so matching is case-insensitive)
+# ---------------------------------------------------------------------------
+MONTHS: dict[str, tuple[str, int]] = {
+    "jaanuar":   ("January",   1),
+    "veebruar":  ("February",  2),
+    "märts":     ("March",     3),
+    "marts":     ("March",     3),   # ä-less OCR variant
+    "aprill":    ("April",     4),
+    "mai":       ("May",       5),
+    "juuni":     ("June",      6),
+    "juuli":     ("July",      7),
+    "august":    ("August",    8),
+    "september": ("September", 9),
+    "oktoober":  ("October",  10),
+    "november":  ("November", 11),
+    "detsember": ("December", 12),
+}
+
+# Three-letter abbreviations sometimes used on bills
+MONTH_ABBR: dict[str, tuple[str, int]] = {
+    "jaan": ("January",   1),
+    "veeb": ("February",  2),
+    "mär":  ("March",     3),
+    "apr":  ("April",     4),
+    "mai":  ("May",       5),
+    "juun": ("June",      6),
+    "juul": ("July",      7),
+    "aug":  ("August",    8),
+    "sept": ("September", 9),
+    "okt":  ("October",  10),
+    "nov":  ("November", 11),
+    "dets": ("December", 12),
+}
+
+# ---------------------------------------------------------------------------
+# Estonian weekdays (full & abbreviated)
+# ---------------------------------------------------------------------------
+WEEKDAYS: dict[str, str] = {
+    "esmaspäev":  "Monday",
+    "teisipäev":  "Tuesday",
+    "kolmapäev":  "Wednesday",
+    "neljapäev":  "Thursday",
+    "reede":      "Friday",
+    "laupäev":    "Saturday",
+    "pühapäev":   "Sunday",
+    # Common single-letter abbreviations on Estonian calendars
+    "e":  "Monday",
+    "t":  "Tuesday",
+    "k":  "Wednesday",
+    "n":  "Thursday",
+    "r":  "Friday",
+    "l":  "Saturday",
+    "p":  "Sunday",
+}
+
+# ---------------------------------------------------------------------------
 # Core glossary: Estonian term → English translation
 # Keys are lowercase for case-insensitive matching.
 # ---------------------------------------------------------------------------
@@ -309,25 +365,85 @@ _METER_SUFFIX = _re.compile(
     _re.IGNORECASE,
 )
 
+# Matches "MonthName Year" patterns like "Veebruar 2026" or "märts 2025"
+_PERIOD_PATTERN = _re.compile(
+    r"\b(" + "|".join(sorted(MONTHS.keys(), key=len, reverse=True)) + r")\b\s*(\d{4})?",
+    _re.IGNORECASE,
+)
+
+
+def translate_month_name(text: str) -> Optional[str]:
+    """Return the English name of an Estonian month word, or None."""
+    key = text.strip().lower()
+    if key in MONTHS:
+        return MONTHS[key][0]
+    if key in MONTH_ABBR:
+        return MONTH_ABBR[key][0]
+    return None
+
+
+def month_number(text: str) -> Optional[int]:
+    """Return the month number 1-12 for an Estonian month name."""
+    key = text.strip().lower()
+    if key in MONTHS:
+        return MONTHS[key][1]
+    if key in MONTH_ABBR:
+        return MONTH_ABBR[key][1]
+    return None
+
+
+def translate_period(text: str) -> str:
+    """
+    Replace every Estonian month word in `text` with its English equivalent.
+    Preserves casing style ("Veebruar 2026" → "February 2026",
+    "veebruar" → "february", "VEEBRUAR" → "FEBRUARY").
+    """
+    if not text:
+        return text
+
+    def _sub(match: _re.Match) -> str:
+        word = match.group(1)
+        year = match.group(2) or ""
+        en = translate_month_name(word) or word
+        # Preserve original casing
+        if word.isupper():
+            en = en.upper()
+        elif word.islower():
+            en = en.lower()
+        return f"{en}{' ' + year if year else ''}"
+
+    return _PERIOD_PATTERN.sub(_sub, text)
+
+
+def translate_weekday(text: str) -> Optional[str]:
+    """Return the English weekday for an Estonian weekday name, or None."""
+    return WEEKDAYS.get(text.strip().lower())
+
 
 def translate_term(term: str) -> str:
     """Look up an Estonian term and return its English translation.
-    Strips embedded meter-reading suffixes before lookup so that
-    'Elekter päevane Alg: 9644 Löpp: 9726' → 'Electricity (daytime) [Start: 9644, End: 9726]'.
+    Strips embedded meter-reading suffixes before lookup and also
+    translates Estonian month names anywhere in the string.
     """
     raw = term.strip()
     meter_note = ""
     m = _METER_SUFFIX.search(raw)
     if m:
-        # Extract the numbers to append in English
         nums = _re.findall(r"[\d,\.]+", m.group())
         if len(nums) >= 2:
             meter_note = f" [Start: {nums[0]}, End: {nums[1]}]"
         raw = raw[: m.start()].strip()
 
+    # Translate any month words present in the raw text
+    raw_translated_months = translate_period(raw)
+
     key = raw.lower()
     if key in GLOSSARY:
         return GLOSSARY[key] + meter_note
+
+    # Direct month match (e.g. "Veebruar 2026")
+    if _PERIOD_PATTERN.fullmatch(raw):
+        return raw_translated_months + meter_note
 
     # Try partial match: find longest matching key that is a substring
     best = ""
@@ -336,7 +452,7 @@ def translate_term(term: str) -> str:
         if k in key and len(k) > len(best):
             best, best_val = k, v
 
-    base = best_val if best_val else raw.title()
+    base = best_val if best_val else raw_translated_months.title() if raw_translated_months != raw else raw.title()
     return base + meter_note
 
 
@@ -449,11 +565,44 @@ def enrich_parsed(parsed: dict) -> dict:
             glossary[parsed.get("provider", key)] = desc
             break
 
-    # Generate English summary
-    summary = generate_summary(parsed)
+    # Translate Estonian month words in the period field (if any)
+    period_et = parsed.get("period")
+    period_en = translate_period(period_et) if period_et else None
+
+    # If Claude only returned "Veebruar 2026" as period without start/end dates,
+    # derive ISO start/end dates from the month name + year
+    pstart = parsed.get("period_start")
+    pend = parsed.get("period_end")
+    if not pstart and not pend and period_et:
+        m = _PERIOD_PATTERN.search(period_et)
+        if m and m.group(2):
+            month_num = month_number(m.group(1))
+            year = int(m.group(2))
+            if month_num:
+                import calendar
+                last_day = calendar.monthrange(year, month_num)[1]
+                pstart = f"{year:04d}-{month_num:02d}-01"
+                pend = f"{year:04d}-{month_num:02d}-{last_day:02d}"
+
+    # Add any Estonian month words we actually saw to the glossary
+    haystack = " ".join([
+        str(parsed.get("period") or ""),
+        str(parsed.get("bill_date") or ""),
+        " ".join(str(li.get("description_et") or "") for li in translated_items),
+    ]).lower()
+    for estonian_month, (english, _) in MONTHS.items():
+        if estonian_month in haystack:
+            glossary[estonian_month.capitalize()] = english
+
+    # Generate English summary (uses possibly-derived dates)
+    parsed_for_summary = {**parsed, "period_start": pstart, "period_end": pend}
+    summary = generate_summary(parsed_for_summary)
 
     return {
         **parsed,
+        "period_start": pstart,
+        "period_end": pend,
+        "period_en": period_en,
         "line_items": translated_items,
         "glossary": glossary,
         "translated_summary": summary,

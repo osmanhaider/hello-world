@@ -96,6 +96,7 @@ Extract structured data from this bill image. Return ONLY a valid JSON object:
   "period_end": "YYYY-MM-DD billing period end",
   "account_number": "customer or account number",
   "address": "service address",
+  "period": "raw period text as shown on the bill (e.g. 'Veebruar 2026', 'Märts 2026') — do NOT translate",
   "vat_amount": numeric VAT in euros,
   "amount_without_vat": numeric amount excluding VAT,
   "meter_reading_start": numeric opening meter reading,
