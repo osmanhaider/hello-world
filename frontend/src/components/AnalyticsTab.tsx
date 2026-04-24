@@ -15,7 +15,9 @@ const COLORS: Record<string, string> = {
   water: "#3b82f6",
   heating: "#ef4444",
   internet: "#8b5cf6",
+  telecom: "#8b5cf6",
   waste: "#6b7280",
+  management: "#14b8a6",
   other: "#9ca3af",
 };
 
