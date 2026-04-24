@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, type Bill } from "../api";
 import { Trash2, ChevronDown, ChevronUp, AlertCircle, Loader2 } from "lucide-react";
+import { useIsMobile } from "../hooks/useIsMobile";
 
 const UTILITY_ICONS: Record<string, string> = {
   electricity: "⚡", gas: "🔥", water: "💧",
@@ -41,8 +42,9 @@ export default function BillsTab() {
 
   const totalEur = filtered.reduce((s, b) => s + (b.amount_eur ?? 0), 0);
 
+  const isMobile = useIsMobile();
   const cardStyle = { background: "#1a1d27", borderRadius: 12, border: "1px solid #2d3148" };
-  const inputStyle = { background: "#252838", border: "1px solid #374151", borderRadius: 6, color: "#e5e7eb", padding: "6px 12px", fontSize: 13 };
+  const inputStyle = { background: "#252838", border: "1px solid #374151", borderRadius: 6, color: "#e5e7eb", padding: "6px 10px", fontSize: 13 };
 
   if (loading) return (
     <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: 200, gap: 12, color: "#9ca3af" }}>
@@ -89,36 +91,36 @@ export default function BillsTab() {
             <div key={bill.id} style={{ ...cardStyle, overflow: "hidden" }}>
               <div
                 onClick={() => setExpanded(isOpen ? null : bill.id)}
-                style={{ padding: "16px 20px", cursor: "pointer", display: "flex", alignItems: "center", gap: 16 }}
+                style={{ padding: isMobile ? "12px 14px" : "16px 20px", cursor: "pointer", display: "flex", alignItems: "center", gap: isMobile ? 10 : 16 }}
               >
-                <div style={{ width: 40, height: 40, borderRadius: 8, background: `${color}22`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0 }}>
+                <div style={{ width: 36, height: 36, borderRadius: 8, background: `${color}22`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>
                   {UTILITY_ICONS[bill.utility_type ?? "other"] ?? "📄"}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <span style={{ fontWeight: 600, color: "white", fontSize: 15 }}>{bill.provider ?? "Unknown Provider"}</span>
-                    {bill.utility_type && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                    <span style={{ fontWeight: 600, color: "white", fontSize: isMobile ? 14 : 15 }}>{bill.provider ?? "Unknown Provider"}</span>
+                    {bill.utility_type && !isMobile && (
                       <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 20, background: `${color}22`, color, border: `1px solid ${color}44`, textTransform: "capitalize" }}>
                         {bill.utility_type}
                       </span>
                     )}
                   </div>
-                  <div style={{ fontSize: 13, color: "#9ca3af", marginTop: 2 }}>
+                  <div style={{ fontSize: 12, color: "#9ca3af", marginTop: 2 }}>
                     {bill.bill_date ?? bill.upload_date?.slice(0, 10)}
-                    {bill.period_start && bill.period_end && ` · ${bill.period_start} → ${bill.period_end}`}
+                    {bill.period_start && bill.period_end && !isMobile && ` · ${bill.period_start} → ${bill.period_end}`}
                   </div>
                 </div>
-                <div style={{ textAlign: "right", marginRight: 8 }}>
-                  <div style={{ fontWeight: 700, fontSize: 18, color: "#22c55e" }}>
+                <div style={{ textAlign: "right", flexShrink: 0 }}>
+                  <div style={{ fontWeight: 700, fontSize: isMobile ? 15 : 18, color: "#22c55e" }}>
                     {bill.amount_eur != null ? `€${bill.amount_eur.toFixed(2)}` : "—"}
                   </div>
-                  {bill.consumption_kwh != null && <div style={{ fontSize: 12, color: "#9ca3af" }}>{bill.consumption_kwh} kWh</div>}
-                  {bill.consumption_m3 != null && <div style={{ fontSize: 12, color: "#9ca3af" }}>{bill.consumption_m3} m³</div>}
+                  {bill.consumption_kwh != null && !isMobile && <div style={{ fontSize: 12, color: "#9ca3af" }}>{bill.consumption_kwh} kWh</div>}
+                  {bill.consumption_m3 != null && !isMobile && <div style={{ fontSize: 12, color: "#9ca3af" }}>{bill.consumption_m3} m³</div>}
                 </div>
-                <button onClick={e => deleteBill(bill.id, e)} style={{ background: "none", border: "none", cursor: "pointer", color: "#6b7280", padding: 4, borderRadius: 4 }}>
-                  <Trash2 size={16} />
+                <button onClick={e => deleteBill(bill.id, e)} style={{ background: "none", border: "none", cursor: "pointer", color: "#6b7280", padding: 4, borderRadius: 4, flexShrink: 0 }}>
+                  <Trash2 size={15} />
                 </button>
-                {isOpen ? <ChevronUp size={16} color="#6b7280" /> : <ChevronDown size={16} color="#6b7280" />}
+                {isOpen ? <ChevronUp size={15} color="#6b7280" style={{ flexShrink: 0 }} /> : <ChevronDown size={15} color="#6b7280" style={{ flexShrink: 0 }} />}
               </div>
 
               {isOpen && (
@@ -158,7 +160,8 @@ export default function BillsTab() {
                       <div style={{ fontSize: 11, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8, fontWeight: 600 }}>
                         Line Items (Estonian → English)
                       </div>
-                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                      <div style={{ overflowX: "auto" }}>
+                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 360 }}>
                         <thead>
                           <tr style={{ borderBottom: "1px solid #2d3148" }}>
                             <th style={{ padding: "6px 0", textAlign: "left", color: "#6b7280", fontSize: 11, fontWeight: 600 }}>ESTONIAN</th>
@@ -178,6 +181,7 @@ export default function BillsTab() {
                           ))}
                         </tbody>
                       </table>
+                      </div>
                     </div>
                   )}
 
