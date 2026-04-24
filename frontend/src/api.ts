@@ -99,9 +99,11 @@ export interface MonthlyTotal {
 }
 
 export const api = {
-  uploadBill: (file: File) => {
+  uploadBill: (file: File, parser?: string, model?: string) => {
     const fd = new FormData();
     fd.append("file", file);
+    if (parser) fd.append("parser", parser);
+    if (model) fd.append("model", model);
     return axios.post<{ id: string; parsed: Record<string, unknown>; replaced: boolean }>(`${BASE}/api/bills/upload`, fd);
   },
   listBills: () => axios.get<Bill[]>(`${BASE}/api/bills`),

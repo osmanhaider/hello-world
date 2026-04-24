@@ -17,12 +17,22 @@ interface UploadTabProps {
 }
 
 type Status = "idle" | "uploading" | "success" | "replaced" | "error";
+type ParserMode = "tesseract" | "openrouter";
+
+const FREE_MODELS = [
+  { id: "google/gemini-2.0-flash-exp:free", label: "Gemini 2.0 Flash (best)" },
+  { id: "meta-llama/llama-3.2-90b-vision-instruct:free", label: "Llama 3.2 90B Vision" },
+  { id: "qwen/qwen2-vl-7b-instruct:free", label: "Qwen2-VL 7B" },
+  { id: "microsoft/phi-3-vision-128k-instruct:free", label: "Phi-3 Vision" },
+];
 
 export default function UploadTab({ onSuccess }: UploadTabProps) {
   const [dragging, setDragging] = useState(false);
   const [status, setStatus] = useState<Status>("idle");
   const [parsed, setParsed] = useState<Record<string, unknown> | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
+  const [parserMode, setParserMode] = useState<ParserMode>("openrouter");
+  const [selectedModel, setSelectedModel] = useState(FREE_MODELS[0].id);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const handleFile = useCallback(async (file: File) => {
@@ -30,7 +40,11 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
     setParsed(null);
     setErrorMsg("");
     try {
-      const res = await api.uploadBill(file);
+      const res = await api.uploadBill(
+        file,
+        parserMode,
+        parserMode === "openrouter" ? selectedModel : undefined,
+      );
       setParsed(res.data.parsed);
       setStatus(res.data.replaced ? "replaced" : "success");
       setTimeout(onSuccess, 2000);
@@ -39,7 +53,7 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
       setErrorMsg(msg);
       setStatus("error");
     }
-  }, [onSuccess]);
+  }, [onSuccess, parserMode, selectedModel]);
 
   const onDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -65,10 +79,63 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
   return (
     <div style={{ maxWidth: 640, margin: "0 auto" }}>
       <h2 style={{ color: "white", marginBottom: 8, fontSize: 22 }}>Upload Invoice / Bill</h2>
-      <p style={{ color: "#9ca3af", marginBottom: 24, fontSize: 14 }}>
-        Tesseract OCR + pdfplumber extract line items locally — no API key needed.
-        For best results on complex or non-standard invoices, set <code style={{ background: "#252838", padding: "1px 5px", borderRadius: 4, fontSize: 12 }}>PARSER_BACKEND=claude</code>.
+      <p style={{ color: "#9ca3af", marginBottom: 16, fontSize: 14 }}>
+        Choose how to extract data from your invoice, then drop or select the file.
       </p>
+
+      {/* Parser selector */}
+      <div style={{ ...cardStyle, marginBottom: 16, padding: 16 }}>
+        <div style={{ fontSize: 11, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 10, fontWeight: 600 }}>
+          Extraction method
+        </div>
+        <div style={{ display: "flex", gap: 8, marginBottom: parserMode === "openrouter" ? 12 : 0 }}>
+          {([
+            { id: "openrouter", label: "🤖 AI (OpenRouter)", desc: "Free vision models — any invoice, any language" },
+            { id: "tesseract", label: "🔍 Local OCR", desc: "Offline, no API key — best for standard layouts" },
+          ] as { id: ParserMode; label: string; desc: string }[]).map(({ id, label, desc }) => (
+            <button
+              key={id}
+              onClick={() => setParserMode(id)}
+              style={{
+                flex: 1,
+                background: parserMode === id ? "#1e2640" : "#252838",
+                border: `1.5px solid ${parserMode === id ? "#2563eb" : "#374151"}`,
+                borderRadius: 8,
+                padding: "10px 12px",
+                cursor: "pointer",
+                textAlign: "left",
+              }}
+            >
+              <div style={{ color: parserMode === id ? "#93c5fd" : "#e5e7eb", fontSize: 13, fontWeight: 600 }}>{label}</div>
+              <div style={{ color: "#6b7280", fontSize: 11, marginTop: 2 }}>{desc}</div>
+            </button>
+          ))}
+        </div>
+
+        {parserMode === "openrouter" && (
+          <div>
+            <label style={{ fontSize: 12, color: "#9ca3af", display: "block", marginBottom: 4 }}>Model</label>
+            <select
+              value={selectedModel}
+              onChange={(e) => setSelectedModel(e.target.value)}
+              style={{
+                width: "100%",
+                background: "#252838",
+                border: "1px solid #374151",
+                borderRadius: 6,
+                color: "#e5e7eb",
+                padding: "7px 10px",
+                fontSize: 13,
+                cursor: "pointer",
+              }}
+            >
+              {FREE_MODELS.map(m => (
+                <option key={m.id} value={m.id}>{m.label}</option>
+              ))}
+            </select>
+          </div>
+        )}
+      </div>
 
       <div
         onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
@@ -95,7 +162,9 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
         {status === "uploading" ? (
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
             <Loader2 size={40} color="#2563eb" style={{ animation: "spin 1s linear infinite" }} />
-            <p style={{ color: "#9ca3af", margin: 0 }}>Running OCR &amp; extracting line items…</p>
+            <p style={{ color: "#9ca3af", margin: 0 }}>
+              {parserMode === "openrouter" ? "Sending to AI model…" : "Running OCR & extracting line items…"}
+            </p>
           </div>
         ) : status === "replaced" ? (
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
@@ -144,10 +213,10 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
               OCR couldn't read this invoice
             </div>
             <div style={{ color: "#d1d5db", fontSize: 13, lineHeight: 1.5 }}>
-              The local Tesseract parser found very little data — this usually means the invoice
-              layout or language doesn't match the built-in patterns. For accurate extraction and
-              line items, set <code style={{ background: "#252838", padding: "1px 5px", borderRadius: 4 }}>PARSER_BACKEND=claude</code> and
-              re-upload. Claude can read any invoice format, language, or layout.
+              The local OCR parser found very little data — this usually means the invoice
+              layout or language doesn't match the built-in patterns. Switch to{" "}
+              <strong style={{ color: "#93c5fd" }}>AI (OpenRouter)</strong> above and re-upload
+              for accurate extraction from any invoice format or language.
             </div>
           </div>
         </div>
@@ -237,14 +306,13 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
       <div style={{ ...cardStyle, marginTop: 24 }}>
         <h3 style={{ color: "white", margin: "0 0 4px", fontSize: 14 }}>Supported Invoice Types</h3>
         <p style={{ color: "#6b7280", fontSize: 12, margin: "0 0 12px" }}>
-          Any invoice or bill can be uploaded. Local OCR works best with standard-layout PDF invoices.
-          Use <code style={{ background: "#252838", padding: "1px 4px", borderRadius: 3 }}>PARSER_BACKEND=claude</code> for
-          non-standard layouts or any language.
+          Local OCR works best with standard-layout PDF invoices.
+          AI (OpenRouter) handles any format, language, or layout using free vision models.
         </p>
 
         <div style={{ marginBottom: 10 }}>
           <div style={{ fontSize: 11, color: "#2563eb", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6, fontWeight: 600 }}>
-            Utility Bills (best OCR accuracy)
+            Utility Bills (best local OCR accuracy)
           </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
             {["Electricity", "Gas", "Water", "Heating", "Internet / Telecom", "Waste Collection", "Housing Association"].map(p => (
@@ -257,7 +325,7 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
 
         <div>
           <div style={{ fontSize: 11, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>
-            Any invoice (Claude backend)
+            Any invoice (AI / OpenRouter)
           </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
             {["Rent", "Subscriptions", "Services", "Repairs", "Insurance", "Any format or language"].map(p => (
