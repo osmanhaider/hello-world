@@ -20,6 +20,9 @@ const MAX_FILE_MB = MAX_FILE_BYTES / (1024 * 1024);
 
 interface UploadTabProps {
   onSuccess: () => void;
+  /** Bubbled to App so the nav can show a pulse dot when uploads are
+   *  running and the user has navigated away. */
+  onRunningChange?: (running: boolean) => void;
 }
 
 type ItemStatus = "pending" | "uploading" | "success" | "replaced" | "error" | "low_quality" | "too_large";
@@ -44,10 +47,15 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export default function UploadTab({ onSuccess }: UploadTabProps) {
+export default function UploadTab({ onSuccess, onRunningChange }: UploadTabProps) {
   const [dragging, setDragging] = useState(false);
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [running, setRunning] = useState(false);
+
+  // Mirror running state to the parent so it can render a navigation hint.
+  useEffect(() => {
+    onRunningChange?.(running);
+  }, [running, onRunningChange]);
   const [parserMode, setParserMode] = useState<ParserMode>("freellmapi");
   const [availableModels, setAvailableModels] = useState(FALLBACK_MODELS);
   const [selectedModel, setSelectedModel] = useState(FALLBACK_MODELS[0].id);

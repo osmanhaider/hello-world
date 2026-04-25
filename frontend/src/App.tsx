@@ -25,6 +25,7 @@ export default function App() {
 
   const [tab, setTab] = useState<Tab>("upload");
   const [refreshKey, setRefreshKey] = useState(0);
+  const [uploadsRunning, setUploadsRunning] = useState(false);
   // Lazy initial: skip the loading state entirely if there's no token to verify.
   const [authState, setAuthState] = useState<AuthState>(() =>
     getToken() ? "loading" : "required",
@@ -150,7 +151,7 @@ export default function App() {
             alignItems: "center",
           }}
         >
-          {([
+          {          ([
             ["upload", "Upload", Upload],
             ["bills", "Bills", Receipt],
             ["analytics", "Analytics", BarChart2],
@@ -158,6 +159,7 @@ export default function App() {
             ["help", "Help", HelpCircle],
           ] as [Tab, string, React.ElementType][]).map(([id, label, Icon]) => {
             const active = tab === id;
+            const showRunningDot = id === "upload" && uploadsRunning && !active;
             return (
               <button
                 key={id}
@@ -177,10 +179,27 @@ export default function App() {
                   fontWeight: 500,
                   background: active ? "var(--accent-soft)" : "transparent",
                   color: active ? "var(--accent)" : "var(--text-2)",
+                  position: "relative",
                 }}
               >
                 <Icon size={16} />
                 {!isMobile && label}
+                {showRunningDot && (
+                  <span
+                    aria-label="Uploads in progress"
+                    style={{
+                      position: "absolute",
+                      top: 6,
+                      right: 6,
+                      width: 8,
+                      height: 8,
+                      borderRadius: "50%",
+                      background: "var(--accent)",
+                      boxShadow: "0 0 0 2px var(--bg-elev)",
+                      animation: "pulseAccent 1.4s ease-in-out infinite",
+                    }}
+                  />
+                )}
               </button>
             );
           })}
@@ -270,8 +289,6 @@ export default function App() {
       </header>
 
       <main
-        key={tab}
-        className="tab-content"
         style={{
           padding: isMobile ? "16px 12px" : "28px 24px",
           maxWidth: 1280,
@@ -279,11 +296,25 @@ export default function App() {
         }}
       >
         <ErrorBoundary>
-          {tab === "upload" && <UploadTab onSuccess={() => { refresh(); setTab("bills"); }} />}
-          {tab === "bills" && <BillsTab onDataChange={refresh} />}
-          {tab === "analytics" && <AnalyticsTab reloadKey={refreshKey} />}
-          {tab === "community" && <CommunityTab reloadKey={refreshKey} />}
-          {tab === "help" && <HelpTab />}
+          {/* Upload stays mounted across tab switches so an in-flight queue
+              isn't lost when the user navigates away and comes back. */}
+          <div
+            style={{ display: tab === "upload" ? "block" : "none" }}
+            aria-hidden={tab !== "upload"}
+          >
+            <UploadTab
+              onSuccess={() => { refresh(); setTab("bills"); }}
+              onRunningChange={setUploadsRunning}
+            />
+          </div>
+          {tab !== "upload" && (
+            <div key={tab} className="tab-content">
+              {tab === "bills" && <BillsTab onDataChange={refresh} />}
+              {tab === "analytics" && <AnalyticsTab reloadKey={refreshKey} />}
+              {tab === "community" && <CommunityTab reloadKey={refreshKey} />}
+              {tab === "help" && <HelpTab />}
+            </div>
+          )}
         </ErrorBoundary>
       </main>
     </div>
