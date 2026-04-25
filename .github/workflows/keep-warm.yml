@@ -23,6 +23,8 @@ jobs:
       - name: Ping FreeLLMAPI
         if: vars.FREELLMAPI_URL != ''
         run: |
+          # /v1/models is a public, always-200 endpoint on FreeLLMAPI that
+          # doesn't burn provider tokens. Use the root URL as a last resort.
           curl -fsS --max-time 60 -o /dev/null \
             -w "freellmapi: %{http_code} in %{time_total}s\n" \
-            "${{ vars.FREELLMAPI_URL }}/api/ping"
+            "${{ vars.FREELLMAPI_URL }}/v1/models"

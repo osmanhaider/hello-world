@@ -63,9 +63,18 @@ Open **http://localhost:5173**. Uploads and the SQLite DB are persisted in a nam
 
 ## Deploy (free tier)
 
-A free-tier cloud setup: **Vercel** for the frontend, **Render** for the backend.
+A free-tier cloud setup: **Vercel** for the frontend, **Render** for the backend, **Google Sign-In** for auth.
 
-> ⚠️ The demo uses a **single shared password** — fine for a personal deployment but not a real multi-user product. Each successful login mints a fresh per-browser data space, so two people sharing the password get isolated bills (no cross-deletion), but anyone can still see their *own* uploads on any device they log in from. For a public-grade deployment, swap this for proper OAuth or Cloudflare Access.
+> Multi-user: every Google account that signs in gets its own private bill workspace. By default uploaded bills are public — visible in the **Community** tab to every other signed-in user. Mark a bill private with the lock toggle on the Bills tab to keep it to yourself. Set `ALLOWED_EMAILS` on the backend to restrict sign-in to a list of accounts you trust.
+
+### 0. Create a Google OAuth Client ID
+
+1. Open [Google Cloud Console → APIs & Services → Credentials](https://console.cloud.google.com/apis/credentials).
+2. **Create Credentials** → **OAuth client ID** → Application type **Web application**.
+3. **Authorized JavaScript origins**: add both
+   - `http://localhost:5173`
+   - `https://<your-vercel-host>.vercel.app`
+4. Save. Copy the **Client ID** (looks like `123456-abc.apps.googleusercontent.com`). The same value goes into `GOOGLE_CLIENT_ID` (backend) and `VITE_GOOGLE_CLIENT_ID` (frontend).
 
 ### 1. Backend on Render
 
@@ -79,7 +88,8 @@ A free-tier cloud setup: **Vercel** for the frontend, **Render** for the backend
    - `FREELLMAPI_BASE_URL` = your FreeLLMAPI server URL
    - `FREELLMAPI_API_KEY` = your FreeLLMAPI unified key *(if auth is enforced)*
    - `FREELLMAPI_MODEL` = `auto` *(optional; overridable per upload)*
-   - `APP_PASSWORD` = any password you'll type at the login screen
+   - `GOOGLE_CLIENT_ID` = the Web Client ID from step 0
+   - `ALLOWED_EMAILS` = optional comma-separated allowlist, e.g. `you@gmail.com,friend@gmail.com`
    - `AUTH_SECRET` = a long random hex string — generate locally with:
      ```
      python -c "import secrets; print(secrets.token_hex(32))"
@@ -94,8 +104,9 @@ The free tier spins down after 15 minutes of inactivity. The first request after
 2. Settings:
    - **Root Directory**: `frontend`
    - **Framework**: `Vite` *(auto-detected)*
-3. Environment variable:
+3. Environment variables:
    - `VITE_API_URL` = the Render URL from step 1 (no trailing slash)
+   - `VITE_GOOGLE_CLIENT_ID` = the Web Client ID from step 0
 4. Click **Deploy**. Your app is live at `https://<project>.vercel.app`.
 
 The bundled `frontend/vercel.json` provides SPA routing so deep links / refreshes don't 404.
@@ -107,11 +118,11 @@ The backend accepts requests from `*.vercel.app` by default. For a custom domain
 CORS_ALLOW_ORIGINS=https://bills.example.com,https://www.bills.example.com
 ```
 
-### 4. Login
+### 4. Sign in
 
-Visiting the Vercel URL will show a password prompt. Enter the `APP_PASSWORD` you set on Render. The token is stored in `localStorage` and lasts 7 days (override with `TOKEN_TTL_SEC`). Each successful login generates a fresh, isolated data space — uploaded bills are scoped to the logging-in browser and aren't visible to other people who log in with the same password. Logging out and back in starts a new (empty) space; the old bills stay in the database but are no longer reachable from that browser. To rotate the password, change `APP_PASSWORD` on Render — existing tokens stay valid until they expire unless you also rotate `AUTH_SECRET` (which invalidates every token immediately).
+Visiting the Vercel URL shows a Google Sign-In button. The first sign-in creates a row in the `users` table keyed on the Google `sub` claim. The app token is stored in `localStorage` and lasts 7 days (override with `TOKEN_TTL_SEC`). Rotate `AUTH_SECRET` to invalidate every existing session immediately.
 
-For local development, leave `APP_PASSWORD` unset and the login screen is skipped entirely.
+To restrict who can sign in, set `ALLOWED_EMAILS` on Render. Anyone outside the list gets a clear `not on the allowlist` error and never reaches the app.
 
 ## Run locally
 
@@ -187,15 +198,17 @@ Backend env vars (see `backend/.env.example` for the full list):
 - `PARSER_BACKEND=tesseract` *(default)* — open-source, local, no API key. Best on Estonian utility bills and korteriühistu invoices.
 - `PARSER_BACKEND=freellmapi` — local OCR/PDF text extraction plus FreeLLMAPI structured JSON extraction. Requires `FREELLMAPI_BASE_URL` to point at a running FreeLLMAPI server. Optionally set `FREELLMAPI_API_KEY` and `FREELLMAPI_MODEL` (`auto` by default); users can still override the model per upload in the UI.
 - `PARSER_BACKEND=claude` — Anthropic Claude API, requires `ANTHROPIC_API_KEY` (paid). Highest accuracy; use only if FreeLLMAPI isn't getting the job done.
-- `APP_PASSWORD` — optional shared-password login gate. Unset = no login required.
-- `AUTH_SECRET` — required when `APP_PASSWORD` is set. 64-char hex, generate with `python -c "import secrets; print(secrets.token_hex(32))"`.
+- `AUTH_SECRET` — required. 64-char hex, generate with `python -c "import secrets; print(secrets.token_hex(32))"`. Used to sign app session tokens.
+- `GOOGLE_CLIENT_ID` — required. OAuth Web Client ID from Google Cloud Console (same value as the frontend's `VITE_GOOGLE_CLIENT_ID`).
+- `ALLOWED_EMAILS` — optional comma-separated allowlist (e.g. `you@gmail.com,friend@gmail.com`). When set, only those Google accounts can sign in.
 - `MAX_UPLOAD_BYTES` — hard cap on upload size in bytes per file (default 25 MB). Multi-file uploads are supported; each file is bounded by this limit.
 - `DB_PATH`, `UPLOADS_DIR`, `LOG_LEVEL` — override storage paths and log verbosity.
 
-Frontend env var (see `frontend/.env.example`):
+Frontend env vars (see `frontend/.env.example`):
 - `VITE_API_URL` — base URL of the backend. Defaults to `http://localhost:8000`.
+- `VITE_GOOGLE_CLIENT_ID` — Google OAuth Web Client ID. Same value as the backend's `GOOGLE_CLIENT_ID`.
 
-> ⚠️ **Security**: for local development the API has no authentication. For deployed instances, set `APP_PASSWORD` + `AUTH_SECRET` to enable the built-in shared-password login screen (see **Deploy** section above). For multi-user production, swap for proper OAuth or Cloudflare Access.
+> Auth is always required. For local dev, create a Google OAuth client with `http://localhost:5173` as an authorized origin (see "Create a Google OAuth Client ID" in the **Deploy** section), then put the same Client ID in both `GOOGLE_CLIENT_ID` and `VITE_GOOGLE_CLIENT_ID`. Setting `ALLOWED_EMAILS=you@gmail.com` restricts sign-in to your own account.
 
 ### 4. Start the frontend (in a second terminal)
 
@@ -205,13 +218,14 @@ npm install
 npm run dev
 ```
 
-Open **http://localhost:5173** in your browser. You'll see three tabs: **Upload**, **Bills**, **Analytics**.
+Open **http://localhost:5173** in your browser. After Google sign-in you'll see five tabs: **Upload**, **Bills**, **Analytics**, **Community**, **Help**.
 
 ### 5. Try it
 
 1. Go to **Upload** → pick an extraction method (🔍 Local OCR or 🤖 AI / FreeLLMAPI) and drag in your invoice. The local parser handles Estonian utility bills out of the box; for any other format, switch to the AI tab and pick a FreeLLMAPI model from the dropdown.
-2. Open the **Bills** tab to see everything stored with expandable per-bill details.
-3. Open **Analytics** to explore 12 dashboard sections — click **Download PDF** to export.
+2. Open the **Bills** tab. Each row has a globe (public) / lock (private) toggle — bills default to public so they show up in the Community tab.
+3. Open **Analytics** to explore 12 dashboard sections for *your* bills — click **Download PDF** to export.
+4. Open **Community** to browse every signed-in user's public bills and see aggregated insights across the whole community, or filter to a specific user.
 
 ## Troubleshooting
 

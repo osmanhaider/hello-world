@@ -1,36 +1,71 @@
-import { useState } from "react";
-import { Lock } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Receipt, AlertCircle, Loader2 } from "lucide-react";
 import axios from "axios";
 import { api } from "../api";
 import { setToken } from "../auth";
+import { getGoogleClientId, loadGoogleIdentityServices } from "../google";
 
 interface Props {
   onSuccess: () => void;
 }
 
 export default function LoginScreen({ onSuccess }: Props) {
-  const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const buttonRef = useRef<HTMLDivElement | null>(null);
+  const [runtimeError, setRuntimeError] = useState<string | null>(null);
+  const [exchanging, setExchanging] = useState(false);
+  const [ready, setReady] = useState(false);
+  const clientId = getGoogleClientId();
+  // Derived from a stable env value, so it doesn't belong in a state update.
+  const configError = !clientId
+    ? "Google sign-in is not configured. Set VITE_GOOGLE_CLIENT_ID on the frontend and GOOGLE_CLIENT_ID on the backend."
+    : null;
+  const error = configError ?? runtimeError;
 
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setLoading(true);
-    try {
-      const res = await api.login(password);
-      setToken(res.data.token);
-      onSuccess();
-    } catch (err) {
-      if (axios.isAxiosError(err) && err.response?.status === 401) {
-        setError("Wrong password.");
-      } else {
-        setError("Could not reach the server. Check your connection.");
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
+  useEffect(() => {
+    if (!clientId) return;
+    let cancelled = false;
+    loadGoogleIdentityServices()
+      .then(() => {
+        if (cancelled || !window.google || !buttonRef.current) return;
+        window.google.accounts.id.initialize({
+          client_id: clientId,
+          callback: async (resp) => {
+            setRuntimeError(null);
+            setExchanging(true);
+            try {
+              const r = await api.loginWithGoogle(resp.credential);
+              setToken(r.data.token);
+              onSuccess();
+            } catch (e) {
+              if (axios.isAxiosError(e)) {
+                const detail = (e.response?.data as { detail?: string } | undefined)?.detail;
+                setRuntimeError(detail ?? "Sign-in failed. Please try again.");
+              } else {
+                setRuntimeError("Could not reach the server. Check your connection.");
+              }
+            } finally {
+              setExchanging(false);
+            }
+          },
+          auto_select: false,
+          cancel_on_tap_outside: true,
+        });
+        window.google.accounts.id.renderButton(buttonRef.current, {
+          theme: "filled_blue",
+          size: "large",
+          text: "signin_with",
+          shape: "pill",
+          width: 280,
+        });
+        setReady(true);
+      })
+      .catch(() => {
+        if (!cancelled) setRuntimeError("Couldn't load Google Sign-In. Try refreshing the page.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [clientId, onSuccess]);
 
   return (
     <div
@@ -45,91 +80,90 @@ export default function LoginScreen({ onSuccess }: Props) {
         padding: 24,
       }}
     >
-      <form
-        onSubmit={submit}
+      <div
         style={{
           background: "#1a1d27",
           border: "1px solid #2d3148",
           borderRadius: 12,
           padding: 32,
           width: "100%",
-          maxWidth: 400,
+          maxWidth: 420,
           display: "flex",
           flexDirection: "column",
-          gap: 16,
+          gap: 20,
+          alignItems: "center",
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <div
             style={{
-              width: 40,
-              height: 40,
+              width: 44,
+              height: 44,
               background: "#2563eb",
-              borderRadius: 8,
+              borderRadius: 10,
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
             }}
           >
-            <Lock size={20} color="white" />
+            <Receipt size={22} color="white" />
           </div>
           <div>
-            <div style={{ fontSize: 18, fontWeight: 700, color: "white" }}>Sign in</div>
-            <div style={{ fontSize: 12, color: "#9ca3af" }}>EE Utility Tracker</div>
+            <div style={{ fontSize: 18, fontWeight: 700, color: "white" }}>
+              EE Utility Tracker
+            </div>
+            <div style={{ fontSize: 12, color: "#9ca3af" }}>
+              Sign in to upload and explore bills
+            </div>
           </div>
         </div>
 
-        <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          <span style={{ fontSize: 13, color: "#9ca3af" }}>Password</span>
-          <input
-            type="password"
-            autoFocus
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            disabled={loading}
-            style={{
-              padding: "10px 12px",
-              borderRadius: 8,
-              border: "1px solid #2d3148",
-              background: "#0f1117",
-              color: "#e5e7eb",
-              fontSize: 14,
-            }}
-          />
-        </label>
+        <p style={{ color: "#9ca3af", fontSize: 13, textAlign: "center", margin: 0 }}>
+          Use your Google account. Your bills will be visible to other signed-in users
+          unless you mark a bill private.
+        </p>
+
+        <div
+          ref={buttonRef}
+          style={{ minHeight: 44, display: "flex", justifyContent: "center" }}
+        />
+
+        {!ready && !error && (
+          <div style={{ color: "#9ca3af", fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>
+            <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} />
+            Loading sign-in…
+          </div>
+        )}
+
+        {exchanging && (
+          <div style={{ color: "#93c5fd", fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>
+            <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} />
+            Signing you in…
+          </div>
+        )}
 
         {error && (
           <div
             style={{
-              padding: "8px 12px",
-              borderRadius: 6,
+              padding: "10px 14px",
+              borderRadius: 8,
               background: "#3a1111",
               border: "1px solid #7f1d1d",
               color: "#fca5a5",
               fontSize: 13,
+              display: "flex",
+              alignItems: "flex-start",
+              gap: 8,
+              width: "100%",
             }}
           >
-            {error}
+            <AlertCircle size={16} style={{ flexShrink: 0, marginTop: 1 }} />
+            <span>{error}</span>
           </div>
         )}
 
-        <button
-          type="submit"
-          disabled={loading || !password}
-          style={{
-            padding: "10px 16px",
-            borderRadius: 8,
-            border: "none",
-            cursor: loading || !password ? "not-allowed" : "pointer",
-            background: loading || !password ? "#1e3a8a" : "#2563eb",
-            color: "white",
-            fontWeight: 600,
-            fontSize: 14,
-          }}
-        >
-          {loading ? "Signing in…" : "Sign in"}
-        </button>
-      </form>
+        <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+      </div>
     </div>
   );
 }

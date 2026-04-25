@@ -177,7 +177,14 @@ function ChartCard({ title, subtitle, children }: { title: string; subtitle?: st
   );
 }
 
-export default function AnalyticsTab() {
+interface AnalyticsTabProps {
+  /** Optional override so the Community tab can reuse the same charts. */
+  source?: () => Promise<{ data: AnalyticsSummary }>;
+  /** Optional re-fetch trigger; bumping this value re-runs `source`. */
+  reloadKey?: number;
+}
+
+export default function AnalyticsTab({ source, reloadKey }: AnalyticsTabProps = {}) {
   const [data, setData] = useState<AnalyticsSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
@@ -186,8 +193,27 @@ export default function AnalyticsTab() {
   const dashboardRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    api.getAnalytics().then(r => { setData(r.data); setLoading(false); });
-  }, []);
+    let cancelled = false;
+    // Toggling the loader when source/reloadKey changes is the whole point
+    // of this effect — the lint rule's general advice doesn't apply here.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setLoading(true);
+    const fetcher = source ?? (() => api.getAnalytics());
+    fetcher()
+      .then((r) => {
+        if (cancelled) return;
+        setData(r.data);
+        setLoading(false);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setData(null);
+        setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [source, reloadKey]);
 
   async function exportToPDF() {
     if (!dashboardRef.current) return;

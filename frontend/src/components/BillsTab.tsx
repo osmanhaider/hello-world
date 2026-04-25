@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type Bill } from "../api";
-import { Trash2, ChevronDown, ChevronUp, AlertCircle, Loader2 } from "lucide-react";
+import { Trash2, ChevronDown, ChevronUp, AlertCircle, Loader2, Lock, Globe } from "lucide-react";
 import { useIsMobile } from "../hooks/useIsMobile";
 
 const UTILITY_ICONS: Record<string, string> = {
@@ -29,6 +29,18 @@ export default function BillsTab() {
     if (!confirm("Delete this bill?")) return;
     await api.deleteBill(id);
     setBills(bs => bs.filter(b => b.id !== id));
+  };
+
+  const togglePrivate = async (bill: Bill, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const next = !bill.is_private;
+    setBills(bs => bs.map(b => b.id === bill.id ? { ...b, is_private: next ? 1 : 0 } : b));
+    try {
+      await api.updateBill(bill.id, { is_private: next ? 1 : 0 });
+    } catch {
+      // Revert on failure so the UI stays accurate.
+      setBills(bs => bs.map(b => b.id === bill.id ? { ...b, is_private: bill.is_private } : b));
+    }
   };
 
   const types = ["all", ...Array.from(new Set(bills.map(b => b.utility_type).filter(Boolean) as string[]))];
@@ -117,6 +129,13 @@ export default function BillsTab() {
                   {bill.consumption_kwh != null && !isMobile && <div style={{ fontSize: 12, color: "#9ca3af" }}>{bill.consumption_kwh} kWh</div>}
                   {bill.consumption_m3 != null && !isMobile && <div style={{ fontSize: 12, color: "#9ca3af" }}>{bill.consumption_m3} m³</div>}
                 </div>
+                <button
+                  onClick={e => togglePrivate(bill, e)}
+                  title={bill.is_private ? "Private — only you can see this bill. Click to make it public." : "Public — visible to all signed-in users. Click to make it private."}
+                  style={{ background: "none", border: "none", cursor: "pointer", color: bill.is_private ? "#f59e0b" : "#22c55e", padding: 4, borderRadius: 4, flexShrink: 0 }}
+                >
+                  {bill.is_private ? <Lock size={15} /> : <Globe size={15} />}
+                </button>
                 <button onClick={e => deleteBill(bill.id, e)} style={{ background: "none", border: "none", cursor: "pointer", color: "#6b7280", padding: 4, borderRadius: 4, flexShrink: 0 }}>
                   <Trash2 size={15} />
                 </button>

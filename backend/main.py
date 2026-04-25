@@ -15,6 +15,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 import auth as auth_mod
+import google_auth as google_auth_mod
 from parser import parse_bill as parse_bill_tesseract
 from parser_freellmapi import parse_bill_with_freellmapi
 from translation import classify_line_item, enrich_parsed
@@ -39,11 +40,6 @@ os.makedirs(UPLOADS_DIR, exist_ok=True)
 # than any single write transaction in this app.
 DB_BUSY_TIMEOUT_SEC = 10.0
 
-# user_id assigned to bills uploaded while auth is disabled (local dev),
-# and the migration target for legacy rows that predate user-scoping.
-_DEFAULT_USER_ID = "default"
-
-
 def _db():
     """Open a SQLite connection with our shared busy-timeout."""
     return aiosqlite.connect(DB_PATH, timeout=DB_BUSY_TIMEOUT_SEC)
@@ -63,6 +59,7 @@ _ALLOWED_MIME = {
 _EDITABLE_BILL_COLUMNS = frozenset({
     "provider", "utility_type", "amount_eur", "consumption_kwh",
     "consumption_m3", "bill_date", "period_start", "period_end", "notes",
+    "is_private",
 })
 
 
@@ -89,26 +86,51 @@ async def init_db() -> None:
                 account_number TEXT,
                 address TEXT,
                 raw_json TEXT,
-                notes TEXT
+                notes TEXT,
+                user_id TEXT,
+                is_private INTEGER NOT NULL DEFAULT 0
             )
         """)
-        # Migration: add user_id to existing databases that were created
-        # before per-user scoping. Backfilling to "default" keeps local-dev
-        # data visible (auth-disabled mode also uses "default"); in
-        # auth-enabled production these legacy rows become orphans, which
-        # is intentional — they were uploaded by no particular user.
+        # Per-user identity table. id == Google `sub` claim.
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id TEXT PRIMARY KEY,
+                email TEXT UNIQUE NOT NULL,
+                name TEXT,
+                picture_url TEXT,
+                created_at TEXT NOT NULL
+            )
+        """)
+        # Migrations for existing databases. We only ever add columns —
+        # never drop or rename — so legacy rows remain queryable.
         async with db.execute("PRAGMA table_info(bills)") as c:
             cols = {row[1] for row in await c.fetchall()}
         if "user_id" not in cols:
             await db.execute("ALTER TABLE bills ADD COLUMN user_id TEXT")
+        if "is_private" not in cols:
             await db.execute(
-                "UPDATE bills SET user_id = ? WHERE user_id IS NULL",
-                (_DEFAULT_USER_ID,),
+                "ALTER TABLE bills ADD COLUMN is_private INTEGER NOT NULL DEFAULT 0"
             )
         await db.execute(
             "CREATE INDEX IF NOT EXISTS bills_user_id_idx ON bills(user_id)"
         )
         await db.commit()
+
+
+async def _upsert_user(db, identity: google_auth_mod.GoogleIdentity) -> None:
+    """Create-or-update a row in the users table from a verified Google identity."""
+    now = datetime.now(timezone.utc).isoformat()
+    await db.execute(
+        """
+        INSERT INTO users (id, email, name, picture_url, created_at)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+            email = excluded.email,
+            name = excluded.name,
+            picture_url = excluded.picture_url
+        """,
+        (identity.sub, identity.email, identity.name, identity.picture, now),
+    )
 
 
 @asynccontextmanager
@@ -140,12 +162,12 @@ app.add_middleware(
 )
 
 
-# Paths that bypass the bearer-token check even when auth is active.
-# `/api/auth/login` must be reachable so users can obtain a token;
-# `/api/auth/status` lets the frontend detect whether auth is enabled
-# at all before showing a login screen.
+# Paths that bypass the bearer-token check. `/api/auth/google` is the
+# entry point that exchanges a Google ID token for an app token; everything
+# else (including the legacy /api/auth/status probe still used by older
+# frontend builds) requires a valid bearer.
 _AUTH_EXEMPT_PATHS = frozenset({
-    "/api/auth/login",
+    "/api/auth/google",
     "/api/auth/status",
 })
 
@@ -155,11 +177,6 @@ async def auth_middleware(request: Request, call_next):
     # CORS preflights must pass through untouched — the browser strips
     # custom headers (including Authorization) before sending them.
     if request.method == "OPTIONS":
-        return await call_next(request)
-    # Auth disabled (local dev): everyone shares the "default" data space
-    # so existing bills stay visible and dev workflows don't change.
-    if not auth_mod.auth_enabled():
-        request.state.user_id = _DEFAULT_USER_ID
         return await call_next(request)
     path = request.url.path
     if not path.startswith("/api/") or path in _AUTH_EXEMPT_PATHS:
@@ -171,46 +188,79 @@ async def auth_middleware(request: Request, call_next):
         payload = auth_mod.verify_token(header[7:].strip())
     except auth_mod.AuthError as e:
         return JSONResponse({"detail": f"Invalid token: {e}"}, status_code=401)
-    # Tokens issued before per-user scoping have no `sub` — map them to
-    # the legacy "default" space so they keep working for one TTL window.
-    request.state.user_id = payload.get("sub") or _DEFAULT_USER_ID
+    request.state.user_id = payload["sub"]
+    request.state.user_email = payload.get("email")
+    request.state.user_name = payload.get("name")
+    request.state.user_picture = payload.get("picture")
     return await call_next(request)
 
 
 def get_user_id(request: Request) -> str:
     """Resolve the caller's user_id, set by auth_middleware."""
-    return getattr(request.state, "user_id", _DEFAULT_USER_ID)
+    user_id = getattr(request.state, "user_id", None)
+    if not user_id:
+        raise HTTPException(401, "Not authenticated")
+    return user_id
 
 
-if auth_mod.auth_enabled() and not auth_mod.AUTH_SECRET:
+if not auth_mod.AUTH_SECRET:
     raise RuntimeError(
-        "APP_PASSWORD is set but AUTH_SECRET is missing. "
-        "Generate one with `python -c 'import secrets; print(secrets.token_hex(32))'` "
-        "and set it as AUTH_SECRET."
+        "AUTH_SECRET is required. Generate one with "
+        "`python -c 'import secrets; print(secrets.token_hex(32))'`"
     )
 
 
-class LoginRequest(BaseModel):
-    password: str
+class GoogleLoginRequest(BaseModel):
+    id_token: str
 
 
 @app.get("/api/auth/status")
 async def auth_status():
-    """Lets the frontend know if a login screen is needed."""
-    return {"auth_required": auth_mod.auth_enabled()}
+    """Frontend-friendly status probe: tells the UI whether Google sign-in is
+    wired up (so it can show a clear configuration error if not)."""
+    return {
+        "auth_required": True,
+        "google_configured": bool(google_auth_mod.GOOGLE_CLIENT_ID),
+    }
 
 
-@app.post("/api/auth/login")
-async def auth_login(body: LoginRequest):
-    if not auth_mod.auth_enabled():
-        # Return a token anyway so the frontend behaves consistently.
-        return {"token": "disabled", "auth_required": False}
-    if not auth_mod.verify_password(body.password):
-        raise HTTPException(401, "Invalid password")
-    # Each successful login mints a fresh user_id, so two browsers sharing
-    # the same demo password get separate, isolated data spaces.
-    user_id = uuid.uuid4().hex
-    return {"token": auth_mod.create_token(user_id), "auth_required": True}
+@app.post("/api/auth/google")
+async def auth_google(body: GoogleLoginRequest):
+    """Exchange a Google ID token for an app session token."""
+    try:
+        identity = google_auth_mod.verify_google_id_token(body.id_token)
+    except google_auth_mod.GoogleAuthError as e:
+        raise HTTPException(401, str(e)) from e
+
+    async with _db() as db:
+        await _upsert_user(db, identity)
+        await db.commit()
+
+    token = auth_mod.create_token(
+        sub=identity.sub,
+        email=identity.email,
+        name=identity.name,
+        picture=identity.picture,
+    )
+    return {
+        "token": token,
+        "user": {
+            "id": identity.sub,
+            "email": identity.email,
+            "name": identity.name,
+            "picture": identity.picture,
+        },
+    }
+
+
+@app.get("/api/auth/me")
+async def auth_me(request: Request, user_id: str = Depends(get_user_id)):
+    return {
+        "id": user_id,
+        "email": getattr(request.state, "user_email", None),
+        "name": getattr(request.state, "user_name", None),
+        "picture": getattr(request.state, "user_picture", None),
+    }
 
 
 class BillUpdate(BaseModel):
@@ -223,6 +273,7 @@ class BillUpdate(BaseModel):
     period_start: str | None = None
     period_end: str | None = None
     notes: str | None = None
+    is_private: bool | None = None
 
 
 def encode_image(path: str) -> tuple[str, str]:
@@ -547,23 +598,34 @@ async def update_bill(
         raise HTTPException(400, "No fields to update")
     set_clause = ", ".join(f"{k} = ?" for k in fields)
     values = list(fields.values()) + [bill_id, user_id]
+    # The `AND user_id = ?` clause is the cross-user authorization gate —
+    # even if a bill_id from another user leaks into the URL, the UPDATE
+    # matches zero rows and we return 404 below.
     async with _db() as db:
-        await db.execute(
+        async with db.execute(
             f"UPDATE bills SET {set_clause} WHERE id = ? AND user_id = ?",
             values,
-        )
+        ) as cursor:
+            affected = cursor.rowcount
         await db.commit()
+    if affected == 0:
+        raise HTTPException(404, "Bill not found")
     return {"status": "updated"}
 
 
 @app.delete("/api/bills/{bill_id}")
 async def delete_bill(bill_id: str, user_id: str = Depends(get_user_id)):
+    # Same cross-user guard as the UPDATE: scope by user_id, then 404 if
+    # the row didn't belong to the caller.
     async with _db() as db:
-        await db.execute(
+        async with db.execute(
             "DELETE FROM bills WHERE id = ? AND user_id = ?",
             (bill_id, user_id),
-        )
+        ) as cursor:
+            affected = cursor.rowcount
         await db.commit()
+    if affected == 0:
+        raise HTTPException(404, "Bill not found")
     return {"status": "deleted"}
 
 
@@ -630,8 +692,40 @@ async def freellmapi_models():
     return {"models": models, "cached": cached_at > time.time()}
 
 
-@app.get("/api/analytics/summary")
-async def analytics_summary(user_id: str = Depends(get_user_id)):
+def _build_bill_filter(
+    user_id_filter: str | None,
+    public_only: bool,
+    extra_clauses: list[str] | None = None,
+) -> tuple[str, list]:
+    """Compose the WHERE clause + bound params for analytics queries.
+    `user_id_filter=None` means "every user" (community view). `public_only`
+    excludes bills the owner marked is_private."""
+    clauses = list(extra_clauses or [])
+    params: list = []
+    if user_id_filter is not None:
+        clauses.append("user_id = ?")
+        params.append(user_id_filter)
+    if public_only:
+        clauses.append("COALESCE(is_private, 0) = 0")
+    where_sql = " AND ".join(clauses) if clauses else "1=1"
+    return where_sql, params
+
+
+async def _compute_analytics(user_id_filter: str | None, public_only: bool) -> dict:
+    """Full analytics aggregation. The personal endpoint passes the caller's
+    own user_id with public_only=False (their own private bills count). The
+    community endpoint passes a target user_id (or None for "all users") with
+    public_only=True."""
+    where_amt, params_amt = _build_bill_filter(
+        user_id_filter, public_only, ["amount_eur IS NOT NULL"]
+    )
+    where_provider, params_provider = _build_bill_filter(
+        user_id_filter, public_only, ["amount_eur IS NOT NULL", "provider IS NOT NULL"]
+    )
+    where_raw, params_raw = _build_bill_filter(
+        user_id_filter, public_only, ["raw_json IS NOT NULL"]
+    )
+
     async with _db() as db:
         db.row_factory = aiosqlite.Row
 
@@ -639,36 +733,36 @@ async def analytics_summary(user_id: str = Depends(get_user_id)):
         # individual line-item categories (electricity, water, heating,
         # waste, building management, …). For single-service bills we
         # attribute the whole amount to the bill's utility_type.
-        async with db.execute("""
+        async with db.execute(f"""
             SELECT id, utility_type, amount_eur, consumption_kwh, consumption_m3,
                    period_start, bill_date, upload_date, raw_json
             FROM bills
-            WHERE amount_eur IS NOT NULL AND user_id = ?
-        """, (user_id,)) as c:
+            WHERE {where_amt}
+        """, params_amt) as c:
             all_bills = [dict(r) for r in await c.fetchall()]
 
-        async with db.execute("""
+        async with db.execute(f"""
             SELECT
                 provider,
                 COUNT(*) as bill_count,
                 SUM(amount_eur) as total_eur,
                 AVG(amount_eur) as avg_eur
             FROM bills
-            WHERE amount_eur IS NOT NULL AND provider IS NOT NULL AND user_id = ?
+            WHERE {where_provider}
             GROUP BY provider
             ORDER BY total_eur DESC
-        """, (user_id,)) as c:
+        """, params_provider) as c:
             by_provider = [dict(r) for r in await c.fetchall()]
 
-        async with db.execute("""
+        async with db.execute(f"""
             SELECT
                 strftime('%Y-%m', COALESCE(period_start, bill_date, upload_date)) as month,
                 SUM(amount_eur) as total_eur
             FROM bills
-            WHERE amount_eur IS NOT NULL AND user_id = ?
+            WHERE {where_amt}
             GROUP BY month
             ORDER BY month
-        """, (user_id,)) as c:
+        """, params_amt) as c:
             monthly_total = [dict(r) for r in await c.fetchall()]
 
     # ────────────────────────────────────────────────────────────────────
@@ -847,9 +941,9 @@ async def analytics_summary(user_id: str = Depends(get_user_id)):
     async with _db() as db:
         db.row_factory = aiosqlite.Row
         async with db.execute(
-            "SELECT period_start, bill_date, upload_date, raw_json FROM bills "
-            "WHERE raw_json IS NOT NULL AND user_id = ?",
-            (user_id,),
+            f"SELECT period_start, bill_date, upload_date, raw_json FROM bills "
+            f"WHERE {where_raw}",
+            params_raw,
         ) as c:
             bill_rows = await c.fetchall()
 
@@ -898,3 +992,72 @@ async def analytics_summary(user_id: str = Depends(get_user_id)):
         "monthly_total": monthly_total,
         "line_item_trends": line_item_trends,
     }
+
+
+@app.get("/api/analytics/summary")
+async def analytics_summary(user_id: str = Depends(get_user_id)):
+    """Personal analytics: caller's bills, both private and public."""
+    return await _compute_analytics(user_id, public_only=False)
+
+
+@app.get("/api/community/users")
+async def community_users(_user_id: str = Depends(get_user_id)):
+    """List every signed-up user with a count of their public bills."""
+    async with _db() as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            """
+            SELECT u.id, u.name, u.email, u.picture_url,
+                   COALESCE(b.bill_count, 0) AS bill_count
+            FROM users u
+            LEFT JOIN (
+                SELECT user_id, COUNT(*) AS bill_count
+                FROM bills
+                WHERE COALESCE(is_private, 0) = 0
+                GROUP BY user_id
+            ) b ON b.user_id = u.id
+            ORDER BY bill_count DESC, u.name COLLATE NOCASE
+            """
+        ) as c:
+            rows = await c.fetchall()
+    return [dict(r) for r in rows]
+
+
+@app.get("/api/community/bills")
+async def community_bills(
+    target_user_id: str | None = None,
+    _user_id: str = Depends(get_user_id),
+):
+    """List public bills across the whole community, optionally scoped to one user."""
+    async with _db() as db:
+        db.row_factory = aiosqlite.Row
+        if target_user_id:
+            sql = """
+                SELECT b.*, u.name AS owner_name, u.picture_url AS owner_picture
+                FROM bills b
+                LEFT JOIN users u ON u.id = b.user_id
+                WHERE b.user_id = ? AND COALESCE(b.is_private, 0) = 0
+                ORDER BY COALESCE(b.bill_date, b.upload_date) DESC
+            """
+            params: tuple = (target_user_id,)
+        else:
+            sql = """
+                SELECT b.*, u.name AS owner_name, u.picture_url AS owner_picture
+                FROM bills b
+                LEFT JOIN users u ON u.id = b.user_id
+                WHERE COALESCE(b.is_private, 0) = 0
+                ORDER BY COALESCE(b.bill_date, b.upload_date) DESC
+            """
+            params = ()
+        async with db.execute(sql, params) as c:
+            rows = await c.fetchall()
+    return [dict(r) for r in rows]
+
+
+@app.get("/api/community/analytics")
+async def community_analytics(
+    target_user_id: str | None = None,
+    _user_id: str = Depends(get_user_id),
+):
+    """Aggregate analytics across the whole community, or one user. Public bills only."""
+    return await _compute_analytics(target_user_id, public_only=True)

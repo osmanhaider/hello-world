@@ -1,12 +1,10 @@
-"""Simple shared-password auth for demo deployments.
+"""App auth tokens.
 
-Tokens are HMAC-SHA256 signed payloads (`base64url(json).hex-sig`). No
-database, no user model, no JWT dependency — just enough to keep a
-public Render URL from being scraped by anyone with the link.
+HMAC-signed payloads carrying Google identity claims. No JWT lib dependency,
+no password — Google Identity Services is the sole sign-in path.
 
 Environment:
-    APP_PASSWORD   Shared password. Required for auth to be active.
-    AUTH_SECRET    HMAC signing secret. Required when APP_PASSWORD is set.
+    AUTH_SECRET    HMAC signing secret. Required.
     TOKEN_TTL_SEC  Optional. Token lifetime in seconds (default 7 days).
 """
 from __future__ import annotations
@@ -23,13 +21,8 @@ class AuthError(Exception):
     pass
 
 
-APP_PASSWORD = os.environ.get("APP_PASSWORD", "")
 AUTH_SECRET = os.environ.get("AUTH_SECRET", "")
 TOKEN_TTL_SEC = int(os.environ.get("TOKEN_TTL_SEC", 7 * 24 * 3600))
-
-
-def auth_enabled() -> bool:
-    return bool(APP_PASSWORD)
 
 
 def _b64url_encode(data: bytes) -> str:
@@ -41,10 +34,24 @@ def _b64url_decode(data: str) -> bytes:
     return base64.urlsafe_b64decode(data + padding)
 
 
-def create_token(user_id: str, ttl_sec: int | None = None) -> str:
+def create_token(
+    *,
+    sub: str,
+    email: str,
+    name: str | None = None,
+    picture: str | None = None,
+    ttl_sec: int | None = None,
+) -> str:
+    """Mint an app session token. `sub` is the Google account `sub` claim."""
     if not AUTH_SECRET:
         raise AuthError("AUTH_SECRET is not configured")
-    payload = {"sub": user_id, "exp": int(time.time()) + (ttl_sec or TOKEN_TTL_SEC)}
+    payload = {
+        "sub": sub,
+        "email": email,
+        "name": name,
+        "picture": picture,
+        "exp": int(time.time()) + (ttl_sec or TOKEN_TTL_SEC),
+    }
     payload_b64 = _b64url_encode(json.dumps(payload, separators=(",", ":")).encode())
     sig = hmac.new(AUTH_SECRET.encode(), payload_b64.encode(), hashlib.sha256).hexdigest()
     return f"{payload_b64}.{sig}"
@@ -66,10 +73,6 @@ def verify_token(token: str) -> dict:
         raise AuthError("invalid payload") from e
     if int(payload.get("exp", 0)) < int(time.time()):
         raise AuthError("token expired")
+    if not payload.get("sub"):
+        raise AuthError("token missing sub claim")
     return payload
-
-
-def verify_password(candidate: str) -> bool:
-    if not APP_PASSWORD:
-        return False
-    return hmac.compare_digest(candidate.encode(), APP_PASSWORD.encode())

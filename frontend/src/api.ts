@@ -45,6 +45,25 @@ export interface Bill {
   address: string | null;
   raw_json: string | null;
   notes: string | null;
+  is_private?: number | null;
+  user_id?: string | null;
+  owner_name?: string | null;
+  owner_picture?: string | null;
+}
+
+export interface User {
+  id: string;
+  email: string | null;
+  name: string | null;
+  picture: string | null;
+}
+
+export interface CommunityUser {
+  id: string;
+  email: string | null;
+  name: string | null;
+  picture_url: string | null;
+  bill_count: number;
 }
 
 export interface AnalyticsSummary {
@@ -141,7 +160,18 @@ export const api = {
     axios.get<{ models: { id: string; label: string }[]; cached?: boolean; error?: string }>(
       `${BASE}/api/freellmapi-models`
     ),
-  getAuthStatus: () => axios.get<{ auth_required: boolean }>(`${BASE}/api/auth/status`),
-  login: (password: string) =>
-    axios.post<{ token: string; auth_required: boolean }>(`${BASE}/api/auth/login`, { password }),
+  getAuthStatus: () =>
+    axios.get<{ auth_required: boolean; google_configured: boolean }>(`${BASE}/api/auth/status`),
+  loginWithGoogle: (idToken: string) =>
+    axios.post<{ token: string; user: User }>(`${BASE}/api/auth/google`, { id_token: idToken }),
+  getMe: () => axios.get<User>(`${BASE}/api/auth/me`),
+  listCommunityUsers: () => axios.get<CommunityUser[]>(`${BASE}/api/community/users`),
+  listCommunityBills: (targetUserId?: string) =>
+    axios.get<Bill[]>(`${BASE}/api/community/bills`, {
+      params: targetUserId ? { target_user_id: targetUserId } : undefined,
+    }),
+  getCommunityAnalytics: (targetUserId?: string) =>
+    axios.get<AnalyticsSummary>(`${BASE}/api/community/analytics`, {
+      params: targetUserId ? { target_user_id: targetUserId } : undefined,
+    }),
 };
