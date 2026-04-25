@@ -24,6 +24,10 @@ interface UploadTabProps {
   /** Bubbled to App so the nav can show a pulse dot when uploads are
    *  running and the user has navigated away. */
   onRunningChange?: (running: boolean) => void;
+  /** True when the Upload tab is the currently visible tab. We refresh
+   *  the saved BYOK key list whenever this transitions to true so a key
+   *  added in Settings shows up without remounting. */
+  isActive?: boolean;
 }
 
 type ItemStatus = "pending" | "uploading" | "success" | "replaced" | "error" | "low_quality" | "too_large";
@@ -48,7 +52,7 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export default function UploadTab({ onSuccess, onRunningChange }: UploadTabProps) {
+export default function UploadTab({ onSuccess, onRunningChange, isActive }: UploadTabProps) {
   const [dragging, setDragging] = useState(false);
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [running, setRunning] = useState(false);
@@ -109,6 +113,13 @@ export default function UploadTab({ onSuccess, onRunningChange }: UploadTabProps
   useEffect(() => {
     if (parserMode === "byok") reloadByokKeys();
   }, [parserMode, reloadByokKeys]);
+
+  // Refetch when the Upload tab becomes active, so keys added in Settings
+  // appear immediately on the user's next visit (UploadTab stays mounted
+  // across tab switches to preserve in-flight queues).
+  useEffect(() => {
+    if (isActive) reloadByokKeys();
+  }, [isActive, reloadByokKeys]);
 
   const updateItem = useCallback((id: string, patch: Partial<QueueItem>) => {
     setQueue(q => q.map(it => (it.id === id ? { ...it, ...patch } : it)));

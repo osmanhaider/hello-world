@@ -308,6 +308,7 @@ export default function App() {
             <UploadTab
               onSuccess={() => { refresh(); setTab("bills"); }}
               onRunningChange={setUploadsRunning}
+              isActive={tab === "upload"}
             />
           </div>
           {tab !== "upload" && (
