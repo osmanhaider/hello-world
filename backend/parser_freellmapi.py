@@ -7,10 +7,15 @@ parser first extracts text locally, then asks FreeLLMAPI to produce the bill JSO
 from __future__ import annotations
 
 import json
+import os
 
 import httpx
 
 from parser import extract_bill_text
+
+# Big enough for korteriühistu bills with 15+ line items + Estonian/English
+# translations. Override with FREELLMAPI_MAX_TOKENS if a future format needs more.
+DEFAULT_MAX_TOKENS = int(os.environ.get("FREELLMAPI_MAX_TOKENS", 10000))
 
 _EXTRACTION_PROMPT = """You are an expert at reading invoices and bills of any type: utilities
 (electricity, gas, water, heating, internet, waste), subscriptions, services, rent,
@@ -57,6 +62,20 @@ def _chat_completions_url(base_url: str) -> str:
     return f"{base}/v1/chat/completions"
 
 
+def _looks_truncated(text: str) -> bool:
+    """Heuristic: an LLM response that hit max_tokens usually ends mid-token,
+    so we never see a closing brace and may end on a partial value."""
+    stripped = text.rstrip()
+    if not stripped:
+        return False
+    if stripped.endswith("}"):
+        return False
+    # Counts of unmatched braces or unclosed strings are a strong signal.
+    opens = stripped.count("{")
+    closes = stripped.count("}")
+    return opens > closes
+
+
 def _loads_json_from_model(text: str, model: str) -> dict:
     text = text.strip()
     if not text:
@@ -74,10 +93,21 @@ def _loads_json_from_model(text: str, model: str) -> dict:
         start = text.find("{")
         end = text.rfind("}")
         if start == -1 or end == -1 or end <= start:
+            if _looks_truncated(text):
+                raise RuntimeError(
+                    f"Model {model} hit its output token limit before finishing the JSON. "
+                    f"Try a larger model or set FREELLMAPI_MAX_TOKENS higher (currently "
+                    f"{DEFAULT_MAX_TOKENS}). First 200 chars: {text[:200]!r}"
+                ) from None
             raise RuntimeError(
                 f"Model {model} returned non-JSON output. First 200 chars: {text[:200]!r}"
             ) from None
-        parsed = json.loads(text[start : end + 1])
+        try:
+            parsed = json.loads(text[start : end + 1])
+        except json.JSONDecodeError as e:
+            raise RuntimeError(
+                f"Model {model} returned malformed JSON: {e}. First 200 chars: {text[:200]!r}"
+            ) from e
 
     if not isinstance(parsed, dict):
         raise RuntimeError(f"Model {model} returned JSON that was not an object.")
@@ -101,7 +131,7 @@ def parse_bill_with_freellmapi(
 
     payload = {
         "model": model,
-        "max_tokens": 1500,
+        "max_tokens": DEFAULT_MAX_TOKENS,
         "messages": [
             {"role": "system", "content": _EXTRACTION_PROMPT},
             {"role": "user", "content": f"Invoice text:\n\n{invoice_text}"},
