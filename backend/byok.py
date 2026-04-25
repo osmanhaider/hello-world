@@ -90,6 +90,14 @@ PROVIDERS: Final[dict[str, Provider]] = {
             key_hint="Starts with fw_",
             key_url="https://fireworks.ai/account/api-keys",
         ),
+        Provider(
+            id="nvidia",
+            name="NVIDIA NIM",
+            base_url="https://integrate.api.nvidia.com/v1",
+            default_model="z-ai/glm4.7",
+            key_hint="Starts with nvapi-",
+            key_url="https://build.nvidia.com/settings/api-keys",
+        ),
     ]
 }
 
