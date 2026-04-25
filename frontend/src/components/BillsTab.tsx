@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import { api, type Bill } from "../api";
-import { Trash2, ChevronDown, ChevronUp, AlertCircle, Loader2, Lock, Globe } from "lucide-react";
+import {
+  Trash2, ChevronDown, ChevronUp, AlertCircle, Loader2, Lock, Globe,
+  Square, CheckSquare,
+} from "lucide-react";
 import { useIsMobile } from "../hooks/useIsMobile";
 
 const UTILITY_ICONS: Record<string, string> = {
@@ -19,6 +22,8 @@ export default function BillsTab() {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [filter, setFilter] = useState("all");
   const [sortKey, setSortKey] = useState<"bill_date" | "amount_eur" | "utility_type">("bill_date");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   useEffect(() => {
     api.listBills().then(r => { setBills(r.data); setLoading(false); });
@@ -29,6 +34,12 @@ export default function BillsTab() {
     if (!confirm("Delete this bill?")) return;
     await api.deleteBill(id);
     setBills(bs => bs.filter(b => b.id !== id));
+    setSelected(prev => {
+      if (!prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
   };
 
   const togglePrivate = async (bill: Bill, e: React.MouseEvent) => {
@@ -43,6 +54,41 @@ export default function BillsTab() {
     }
   };
 
+  const toggleSelected = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const clearSelection = () => setSelected(new Set());
+
+  const bulkDelete = async () => {
+    if (selected.size === 0) return;
+    const ids = Array.from(selected);
+    if (!confirm(`Delete ${ids.length} bill${ids.length === 1 ? "" : "s"}? This can't be undone.`)) return;
+    setBulkDeleting(true);
+    // Optimistic: remove the rows immediately.
+    setBills(bs => bs.filter(b => !selected.has(b.id)));
+    setSelected(new Set());
+    const results = await Promise.allSettled(ids.map(id => api.deleteBill(id)));
+    setBulkDeleting(false);
+    const failed = results.filter(r => r.status === "rejected").length;
+    if (failed > 0) {
+      // Refresh from the server so any rows that didn't actually delete come back.
+      try {
+        const r = await api.listBills();
+        setBills(r.data);
+      } catch {
+        // Ignore — the user can refresh manually.
+      }
+      alert(`${failed} of ${ids.length} bill${ids.length === 1 ? "" : "s"} couldn't be deleted. Reloading the list.`);
+    }
+  };
+
   const types = ["all", ...Array.from(new Set(bills.map(b => b.utility_type).filter(Boolean) as string[]))];
   const filtered = bills
     .filter(b => filter === "all" || b.utility_type === filter)
@@ -53,6 +99,22 @@ export default function BillsTab() {
     });
 
   const totalEur = filtered.reduce((s, b) => s + (b.amount_eur ?? 0), 0);
+  const allFilteredSelected = filtered.length > 0 && filtered.every(b => selected.has(b.id));
+  const toggleAllVisible = () => {
+    if (allFilteredSelected) {
+      setSelected(prev => {
+        const next = new Set(prev);
+        filtered.forEach(b => next.delete(b.id));
+        return next;
+      });
+    } else {
+      setSelected(prev => {
+        const next = new Set(prev);
+        filtered.forEach(b => next.add(b.id));
+        return next;
+      });
+    }
+  };
 
   const isMobile = useIsMobile();
   const cardStyle = { background: "#1a1d27", borderRadius: 12, border: "1px solid #2d3148" };
@@ -82,6 +144,19 @@ export default function BillsTab() {
           </p>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
+          <button
+            onClick={toggleAllVisible}
+            disabled={filtered.length === 0}
+            style={{
+              ...inputStyle,
+              cursor: filtered.length === 0 ? "not-allowed" : "pointer",
+              display: "flex", alignItems: "center", gap: 6,
+              opacity: filtered.length === 0 ? 0.5 : 1,
+            }}
+          >
+            {allFilteredSelected ? <CheckSquare size={14} /> : <Square size={14} />}
+            {allFilteredSelected ? "Unselect" : "Select all"}
+          </button>
           <select value={filter} onChange={e => setFilter(e.target.value)} style={inputStyle}>
             {types.map(t => <option key={t} value={t}>{t === "all" ? "All types" : `${UTILITY_ICONS[t] || ""} ${t}`}</option>)}
           </select>
@@ -93,18 +168,81 @@ export default function BillsTab() {
         </div>
       </div>
 
+      {selected.size > 0 && (
+        <div
+          style={{
+            position: "sticky", top: 0, zIndex: 5,
+            display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap",
+            background: "#1e2640", border: "1px solid #2563eb",
+            borderRadius: 12, padding: "10px 14px", marginBottom: 12,
+          }}
+        >
+          <span style={{ color: "#dbeafe", fontSize: 13, fontWeight: 600 }}>
+            {selected.size} selected
+          </span>
+          <button
+            onClick={clearSelection}
+            disabled={bulkDeleting}
+            style={{
+              background: "transparent", border: "1px solid #374151",
+              borderRadius: 6, color: "#d1d5db", padding: "5px 10px",
+              fontSize: 12, cursor: bulkDeleting ? "not-allowed" : "pointer",
+            }}
+          >
+            Clear
+          </button>
+          <button
+            onClick={bulkDelete}
+            disabled={bulkDeleting}
+            style={{
+              marginLeft: "auto",
+              display: "flex", alignItems: "center", gap: 6,
+              background: bulkDeleting ? "#7f1d1d" : "#dc2626",
+              border: "none", borderRadius: 6, color: "white",
+              padding: "6px 12px", fontSize: 13, fontWeight: 600,
+              cursor: bulkDeleting ? "not-allowed" : "pointer",
+            }}
+          >
+            {bulkDeleting
+              ? <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} />
+              : <Trash2 size={14} />}
+            {bulkDeleting ? "Deleting…" : `Delete ${selected.size}`}
+          </button>
+        </div>
+      )}
+
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {filtered.map(bill => {
           const isOpen = expanded === bill.id;
           const color = TYPE_COLORS[bill.utility_type ?? "other"] ?? "#9ca3af";
           const raw = bill.raw_json ? JSON.parse(bill.raw_json) : {};
 
+          const isSelected = selected.has(bill.id);
           return (
-            <div key={bill.id} style={{ ...cardStyle, overflow: "hidden" }}>
+            <div
+              key={bill.id}
+              style={{
+                ...cardStyle,
+                overflow: "hidden",
+                outline: isSelected ? "2px solid #2563eb" : "none",
+                outlineOffset: -1,
+              }}
+            >
               <div
                 onClick={() => setExpanded(isOpen ? null : bill.id)}
                 style={{ padding: isMobile ? "12px 14px" : "16px 20px", cursor: "pointer", display: "flex", alignItems: "center", gap: isMobile ? 10 : 16 }}
               >
+                <button
+                  onClick={(e) => toggleSelected(bill.id, e)}
+                  title={isSelected ? "Unselect" : "Select"}
+                  style={{
+                    background: "transparent", border: "none", padding: 4,
+                    cursor: "pointer", color: isSelected ? "#2563eb" : "#6b7280",
+                    flexShrink: 0, display: "flex", alignItems: "center",
+                  }}
+                >
+                  {isSelected ? <CheckSquare size={18} /> : <Square size={18} />}
+                </button>
                 <div style={{ width: 36, height: 36, borderRadius: 8, background: `${color}22`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>
                   {UTILITY_ICONS[bill.utility_type ?? "other"] ?? "📄"}
                 </div>
