@@ -14,7 +14,12 @@ const TYPE_COLORS: Record<string, string> = {
   heating: "#dc2626", internet: "#8b5cf6", waste: "#64748b", other: "#94a3b8",
 };
 
-export default function CommunityTab() {
+interface CommunityTabProps {
+  /** Bumped by the parent on data mutations to force a refetch. */
+  reloadKey?: number;
+}
+
+export default function CommunityTab({ reloadKey }: CommunityTabProps = {}) {
   const [users, setUsers] = useState<CommunityUser[]>([]);
   const [bills, setBills] = useState<Bill[]>([]);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
@@ -30,7 +35,7 @@ export default function CommunityTab() {
       .catch(() => { if (!cancelled) setError("Couldn't load community users."); })
       .finally(() => { if (!cancelled) setLoadingUsers(false); });
     return () => { cancelled = true; };
-  }, []);
+  }, [reloadKey]);
 
   useEffect(() => {
     let cancelled = false;
@@ -43,7 +48,7 @@ export default function CommunityTab() {
       .catch(() => { if (!cancelled) setError("Couldn't load community bills."); })
       .finally(() => { if (!cancelled) setLoadingBills(false); });
     return () => { cancelled = true; };
-  }, [selectedUserId]);
+  }, [selectedUserId, reloadKey]);
 
   const analyticsSource = useCallback(
     () => api.getCommunityAnalytics(selectedUserId ?? undefined),
@@ -108,7 +113,10 @@ export default function CommunityTab() {
         </div>
       )}
 
-      <AnalyticsTab source={analyticsSource} reloadKey={selectedUserId ? 1 : 0} />
+      <AnalyticsTab
+        source={analyticsSource}
+        reloadKey={(reloadKey ?? 0) * 1000 + (selectedUserId ? 1 : 0)}
+      />
 
       <div style={{ marginTop: 24 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>

@@ -16,7 +16,13 @@ const TYPE_COLORS: Record<string, string> = {
   heating: "#ef4444", internet: "#8b5cf6", waste: "#6b7280", other: "#9ca3af",
 };
 
-export default function BillsTab() {
+interface BillsTabProps {
+  /** Called whenever the bill list mutates. Lets the parent invalidate
+   * cached data on other tabs (Analytics / Community). */
+  onDataChange?: () => void;
+}
+
+export default function BillsTab({ onDataChange }: BillsTabProps = {}) {
   const [bills, setBills] = useState<Bill[]>([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -29,10 +35,27 @@ export default function BillsTab() {
     api.listBills().then(r => { setBills(r.data); setLoading(false); });
   }, []);
 
+  /** Always pull from the server after a mutation so the UI reflects truth,
+   * not the optimistic guess. */
+  const refetch = async () => {
+    try {
+      const r = await api.listBills();
+      setBills(r.data);
+    } catch {
+      // Network error — leave state alone; the user can reload manually.
+    }
+    onDataChange?.();
+  };
+
   const deleteBill = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!confirm("Delete this bill?")) return;
-    await api.deleteBill(id);
+    try {
+      await api.deleteBill(id);
+    } catch {
+      alert("Couldn't delete this bill. The server didn't accept the request.");
+      return;
+    }
     setBills(bs => bs.filter(b => b.id !== id));
     setSelected(prev => {
       if (!prev.has(id)) return prev;
@@ -40,6 +63,7 @@ export default function BillsTab() {
       next.delete(id);
       return next;
     });
+    onDataChange?.();
   };
 
   const togglePrivate = async (bill: Bill, e: React.MouseEvent) => {
@@ -48,6 +72,7 @@ export default function BillsTab() {
     setBills(bs => bs.map(b => b.id === bill.id ? { ...b, is_private: next ? 1 : 0 } : b));
     try {
       await api.updateBill(bill.id, { is_private: next ? 1 : 0 });
+      onDataChange?.();
     } catch {
       // Revert on failure so the UI stays accurate.
       setBills(bs => bs.map(b => b.id === bill.id ? { ...b, is_private: bill.is_private } : b));
@@ -71,21 +96,15 @@ export default function BillsTab() {
     const ids = Array.from(selected);
     if (!confirm(`Delete ${ids.length} bill${ids.length === 1 ? "" : "s"}? This can't be undone.`)) return;
     setBulkDeleting(true);
-    // Optimistic: remove the rows immediately.
-    setBills(bs => bs.filter(b => !selected.has(b.id)));
-    setSelected(new Set());
     const results = await Promise.allSettled(ids.map(id => api.deleteBill(id)));
-    setBulkDeleting(false);
     const failed = results.filter(r => r.status === "rejected").length;
+    // Whatever happened, sync the UI to the actual server state — that
+    // way the user can never see "deleted" rows that quietly came back.
+    await refetch();
+    setSelected(new Set());
+    setBulkDeleting(false);
     if (failed > 0) {
-      // Refresh from the server so any rows that didn't actually delete come back.
-      try {
-        const r = await api.listBills();
-        setBills(r.data);
-      } catch {
-        // Ignore — the user can refresh manually.
-      }
-      alert(`${failed} of ${ids.length} bill${ids.length === 1 ? "" : "s"} couldn't be deleted. Reloading the list.`);
+      alert(`${failed} of ${ids.length} bill${ids.length === 1 ? "" : "s"} couldn't be deleted. The list has been refreshed from the server.`);
     }
   };
 

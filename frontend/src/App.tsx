@@ -199,9 +199,9 @@ export default function App() {
       <main style={{ padding: isMobile ? "16px 12px" : "24px", maxWidth: 1280, margin: "0 auto" }}>
         <ErrorBoundary>
           {tab === "upload" && <UploadTab onSuccess={() => { refresh(); setTab("bills"); }} />}
-          {tab === "bills" && <BillsTab key={refreshKey} />}
-          {tab === "analytics" && <AnalyticsTab key={refreshKey} />}
-          {tab === "community" && <CommunityTab key={refreshKey} />}
+          {tab === "bills" && <BillsTab onDataChange={refresh} />}
+          {tab === "analytics" && <AnalyticsTab reloadKey={refreshKey} />}
+          {tab === "community" && <CommunityTab reloadKey={refreshKey} />}
           {tab === "help" && <HelpTab />}
         </ErrorBoundary>
       </main>
