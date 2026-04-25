@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
+import axios from "axios";
 import { api } from "../api";
 import {
   Upload, CheckCircle, AlertCircle, Loader2, RefreshCw, FileText, X,
@@ -123,7 +124,19 @@ export default function UploadTab({ onSuccess, onRunningChange }: UploadTabProps
         }
       } catch (e: unknown) {
         problemCount += 1;
-        const msg = e instanceof Error ? e.message : "Upload failed";
+        // FastAPI returns 422 for extraction failures with `detail.message`.
+        // Surface that exact message so the user knows whether it was a
+        // rate-limit, a bad model response, or something else.
+        let msg = e instanceof Error ? e.message : "Upload failed";
+        if (axios.isAxiosError(e) && e.response?.data) {
+          const data = e.response.data as { detail?: unknown };
+          if (typeof data.detail === "string") {
+            msg = data.detail;
+          } else if (data.detail && typeof data.detail === "object") {
+            const d = data.detail as { message?: string };
+            if (typeof d.message === "string") msg = d.message;
+          }
+        }
         updateItem(item.id, { status: "error", errorMsg: msg });
       }
     }

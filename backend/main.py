@@ -418,6 +418,7 @@ async def upload_bill(
             f.write(chunk)
 
     effective_parser = (parser or PARSER_BACKEND).lower()
+    parse_error: str | None = None
     try:
         if effective_parser == "claude":
             parsed = parse_bill_with_claude(save_path)
@@ -433,13 +434,39 @@ async def upload_bill(
         parsed = enrich_parsed(parsed)  # add translations locally — no API call
     except Exception as e:
         logger.exception("Bill parsing failed for %s (backend=%s)", filename, effective_parser)
-        # Surface the actual error string so the UI can tell the user what
-        # went wrong — "model not available", rate limit, bad JSON, etc.
+        parse_error = f"{type(e).__name__}: {e}"
         parsed = {
-            "error": f"{type(e).__name__}: {e}",
+            "error": parse_error,
             "_source": effective_parser,
             "_low_quality": True,
         }
+
+    # Fail closed: if extraction errored out, or if the parser returned
+    # something completely useless (no provider, no amount, no line items),
+    # don't insert a half-empty row that would clutter the Bills tab as
+    # "Unknown Provider €—". The user gets a clear error and can retry.
+    has_useful_data = (
+        bool(parsed.get("provider"))
+        or parsed.get("amount_eur") is not None
+        or bool(parsed.get("line_items"))
+    )
+    if parse_error is not None or not has_useful_data:
+        try:
+            os.remove(save_path)
+        except OSError:
+            pass
+        message = parse_error or (
+            "The parser couldn't read this invoice — no provider, amount, "
+            "or line items detected. Try a clearer scan or switch parser."
+        )
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": message,
+                "parser": effective_parser,
+                "filename": filename,
+            },
+        )
 
     now = datetime.now(timezone.utc).isoformat()
     provider = parsed.get("provider")
