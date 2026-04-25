@@ -1,4 +1,8 @@
-import { Upload, Receipt, BarChart2, FileText, RefreshCw, Download, ShieldCheck, Terminal } from "lucide-react";
+import {
+  Upload, Receipt, BarChart2, Users, Sparkles,
+  FileText, RefreshCw, Download, ShieldCheck, Terminal,
+  Lock, Globe, CheckSquare, Sun, Moon,
+} from "lucide-react";
 
 const cardStyle: React.CSSProperties = {
   background: "var(--surface-1)",
@@ -26,22 +30,32 @@ const subtleChip: React.CSSProperties = {
   marginBottom: 6,
 };
 
-// Steps shown in the quickstart
+// 5-card quickstart that mirrors the actual app surface.
 const STEPS: { icon: React.ElementType; title: string; body: string }[] = [
   {
+    icon: ShieldCheck,
+    title: "1 · Sign in with Google",
+    body: "Each Google account gets its own private bill workspace. Your data is scoped to your `sub` claim, so other users can only see what you choose to share.",
+  },
+  {
     icon: Upload,
-    title: "1 · Upload your bill",
-    body: "Drop a PDF or photo of your Estonian utility bill on the Upload tab. Tesseract OCR and pdfplumber extract every line item locally — no API key or external service needed.",
+    title: "2 · Upload your bill",
+    body: "Drop a PDF or photo on the Upload tab. Pick Local OCR for Estonian utility bills, or AI (FreeLLMAPI) to route through free LLM providers for any invoice format or language.",
   },
   {
     icon: Receipt,
-    title: "2 · Review the extracted details",
-    body: "Switch to the Bills tab to see provider, period, totals and each translated line item. Edit any mis-parsed field in place or delete bills you don't want to keep.",
+    title: "3 · Review & curate",
+    body: "Open the Bills tab to inspect every parsed line item. Toggle the lock to mark a bill private. Tick the checkboxes to bulk-delete a batch with one click.",
   },
   {
     icon: BarChart2,
-    title: "3 · Explore the analytics",
-    body: "Open the Analytics tab for 12 dashboard sections: MoM/YoY change, unit-price trends, price vs consumption decomposition, per-utility line charts and more.",
+    title: "4 · Explore your analytics",
+    body: "The Analytics tab packs 12 dashboard sections: MoM/YoY change, unit-price trends, price vs consumption decomposition, per-utility line charts, and more.",
+  },
+  {
+    icon: Users,
+    title: "5 · See the community",
+    body: "The Community tab aggregates every signed-in user's public bills. Pick \"All users\" for community-wide insights, or click a specific person to see only theirs.",
   },
 ];
 
@@ -126,20 +140,31 @@ const KPI_NOTES: [string, string][] = [
 ];
 
 const TIPS: [string, string][] = [
+  ["AI vs local OCR", "Local OCR is fastest and works offline for Estonian utility bills. Switch to AI (FreeLLMAPI) for non-Estonian invoices, scanned docs with unusual layouts, or anything Tesseract can't quite read."],
   ["Use PDF when possible", "Native-text PDFs give 100% extraction confidence; images fall back to OCR (~95%)."],
-  ["Upload the same bill twice", "The app detects duplicates (same filename, or same provider + period) and replaces the previous entry automatically — you'll see an amber 'Existing bill replaced' banner."],
+  ["Bulk select & delete", "Tick the circle on each row, or hit Select all in the toolbar, then click the red Delete button. Failures are surfaced and the list refreshes from the server."],
+  ["Public vs private", "Click the globe icon on a bill to toggle it private. Private bills only show on your own Bills tab and never appear in Community."],
+  ["Pick a model", "On the Upload tab, the model dropdown reflects whatever is configured in your FreeLLMAPI dashboard. \"Auto\" lets the FreeLLMAPI router pick across your healthy provider keys."],
   ["Period-based grouping", "Analytics group by billing period, not invoice issue date. A March bill issued April 13 still counts as March."],
-  ["Works offline after install", "Once dependencies are installed, the app runs entirely on localhost — no cloud round-trips."],
+  ["Duplicate detection", "Re-uploading a file with the same filename (or same provider + period) replaces the previous entry — you'll see an amber 'Existing bill replaced' banner."],
+  ["Theme & contrast", "The sun/moon button in the header cycles Light → Dark → System. Your choice persists across sessions."],
+];
+
+const PRIVACY_NOTES: [React.ElementType, string, string][] = [
+  [Globe, "Public by default", "When you upload a bill it's visible in the Community tab to every signed-in user, including provider, amount, and address. Mark it private if you don't want that."],
+  [Lock, "Private bills are yours alone", "Toggle the lock on any bill row. Private bills disappear from /api/community/bills and the community analytics aggregate immediately."],
+  [ShieldCheck, "Allowlist sign-in", "If the deployment sets ALLOWED_EMAILS, only the listed Google accounts can sign in. Anyone else gets a clear \"not on the allowlist\" error."],
+  [CheckSquare, "Cross-user isolation", "Even if a bill ID leaks, only the owner can edit or delete it — every mutation runs `WHERE id = ? AND user_id = ?` and returns 404 otherwise."],
 ];
 
 export default function HelpTab() {
   return (
     <div style={{ maxWidth: 920, margin: "0 auto" }}>
       <h2 style={{ color: "var(--text-1)", fontSize: 22, margin: "0 0 8px", letterSpacing: -0.2 }}>How to use this app</h2>
-      <p style={{ color: "var(--text-2)", fontSize: 14, margin: "0 0 24px" }}>
-        Upload monthly utility bills, let the open-source parser extract every line item in
-        Estonian, and explore spend patterns through 12 analytics sections. Everything runs
-        locally — no API key required.
+      <p style={{ color: "var(--text-2)", fontSize: 14, margin: "0 0 24px", lineHeight: 1.55 }}>
+        Sign in with Google, upload monthly utility bills, and explore spend patterns through 12
+        analytics sections. Use the <strong style={{ color: "var(--text-1)" }}>Community</strong> tab
+        to see everyone else's public bills, or mark yours private to keep them out of view.
       </p>
 
       {/* Quickstart */}
@@ -164,6 +189,29 @@ export default function HelpTab() {
             <div style={{ color: "var(--text-2)", fontSize: 13, lineHeight: 1.55 }}>{body}</div>
           </div>
         ))}
+      </div>
+
+      {/* Privacy & sharing */}
+      <div style={sectionTitleStyle}>🔐 Privacy & sharing</div>
+      <div className="lift" style={cardStyle}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 16 }}>
+          {PRIVACY_NOTES.map(([Icon, title, body]) => (
+            <div key={title} style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+              <div style={{
+                width: 28, height: 28, borderRadius: 8,
+                background: "var(--accent-soft)", color: "var(--accent)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                flexShrink: 0,
+              }}>
+                <Icon size={14} />
+              </div>
+              <div>
+                <div style={{ color: "var(--text-1)", fontSize: 13, fontWeight: 600, marginBottom: 2 }}>{title}</div>
+                <div style={{ color: "var(--text-2)", fontSize: 12, lineHeight: 1.5 }}>{body}</div>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* Tips */}
@@ -248,13 +296,18 @@ export default function HelpTab() {
       <div style={sectionTitleStyle}>✨ What this app does</div>
       <div className="lift" style={cardStyle}>
         <div style={{ display: "flex", flexWrap: "wrap" }}>
+          <span style={subtleChip}><ShieldCheck size={12} style={{ verticalAlign: -1, marginRight: 4 }} />Google sign-in (multi-user)</span>
+          <span style={subtleChip}><Users size={12} style={{ verticalAlign: -1, marginRight: 4 }} />Community insights tab</span>
+          <span style={subtleChip}><Lock size={12} style={{ verticalAlign: -1, marginRight: 4 }} />Per-bill private toggle</span>
           <span style={subtleChip}><FileText size={12} style={{ verticalAlign: -1, marginRight: 4 }} />OCR + native PDF parsing</span>
-          <span style={subtleChip}>Local translation (180+ terms)</span>
+          <span style={subtleChip}><Sparkles size={12} style={{ verticalAlign: -1, marginRight: 4 }} />FreeLLMAPI multi-provider extraction</span>
+          <span style={subtleChip}>Local Estonian glossary (180+ terms)</span>
           <span style={subtleChip}>Korteriühistu line-item split</span>
           <span style={subtleChip}><RefreshCw size={12} style={{ verticalAlign: -1, marginRight: 4 }} />Duplicate detection & replace</span>
+          <span style={subtleChip}><CheckSquare size={12} style={{ verticalAlign: -1, marginRight: 4 }} />Bulk select & delete</span>
           <span style={subtleChip}>12-section dashboard</span>
           <span style={subtleChip}><Download size={12} style={{ verticalAlign: -1, marginRight: 4 }} />Client-side PDF export</span>
-          <span style={subtleChip}><ShieldCheck size={12} style={{ verticalAlign: -1, marginRight: 4 }} />No API key required</span>
+          <span style={subtleChip}><Sun size={12} style={{ verticalAlign: -1, marginRight: 4 }} /><Moon size={12} style={{ verticalAlign: -1, marginRight: 4 }} />Light & dark themes</span>
           <span style={subtleChip}><Terminal size={12} style={{ verticalAlign: -1, marginRight: 4 }} />FastAPI + React + SQLite</span>
         </div>
       </div>
