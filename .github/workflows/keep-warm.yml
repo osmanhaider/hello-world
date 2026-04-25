@@ -1,0 +1,28 @@
+name: Keep Render services warm
+
+on:
+  schedule:
+    # every 10 minutes — Render free tier sleeps after 15 min idle.
+    # GitHub Actions cron is best-effort and can drift a few minutes,
+    # so 10 min keeps comfortable margin.
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Ping utility backend
+        if: vars.BACKEND_URL != ''
+        run: |
+          curl -fsS --max-time 60 -o /dev/null \
+            -w "backend: %{http_code} in %{time_total}s\n" \
+            "${{ vars.BACKEND_URL }}/api/auth/status"
+
+      - name: Ping FreeLLMAPI
+        if: vars.FREELLMAPI_URL != ''
+        run: |
+          curl -fsS --max-time 60 -o /dev/null \
+            -w "freellmapi: %{http_code} in %{time_total}s\n" \
+            "${{ vars.FREELLMAPI_URL }}/api/ping"
