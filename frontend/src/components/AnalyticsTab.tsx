@@ -13,7 +13,7 @@ import jsPDF from "jspdf";
 // McKinsey-inspired palette: one primary blue, a complementary teal/emerald,
 // warm accents for amber/orange, and red/green reserved for directional signals.
 const COLORS: Record<string, string> = {
-  electricity: "#f59e0b",   // amber
+  electricity: "var(--warning)",   // amber
   gas: "#f97316",           // orange
   water: "#0ea5e9",         // sky
   heating: "#dc2626",       // red
@@ -26,7 +26,7 @@ const COLORS: Record<string, string> = {
 
 const MONTH_NAMES = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const PALETTE = [
-  "#2563eb", "#0d9488", "#f59e0b", "#dc2626", "#8b5cf6",
+  "#2563eb", "#0d9488", "var(--warning)", "#dc2626", "#8b5cf6",
   "#0ea5e9", "#ec4899", "#14b8a6", "#f97316", "#6366f1",
 ];
 
@@ -146,7 +146,7 @@ function PctBadge({ v, label }: { v: number | null; label: string }) {
 
 function StatCard({ label, value, sub, trend }: { label: string; value: string; sub?: string; trend?: "up" | "down" | "flat" }) {
   return (
-    <div style={{ background: "var(--surface-1)", border: "1px solid #2d3148", borderRadius: 12, padding: "20px 24px" }}>
+    <div style={{ background: "var(--surface-1)", border: "1px solid var(--border)", borderRadius: 12, padding: "20px 24px" }}>
       <div style={{ fontSize: 12, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>{label}</div>
       <div style={{ fontSize: 28, fontWeight: 700, color: "var(--text-1)" }}>{value}</div>
       {sub && (
@@ -167,7 +167,7 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 
 function ChartCard({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
   return (
-    <div style={{ background: "var(--surface-1)", border: "1px solid #2d3148", borderRadius: 12, padding: 24 }}>
+    <div style={{ background: "var(--surface-1)", border: "1px solid var(--border)", borderRadius: 12, padding: 24 }}>
       <div style={{ marginBottom: 20 }}>
         <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text-1)" }}>{title}</div>
         {subtitle && <div style={{ fontSize: 12, color: "var(--text-3)", marginTop: 4 }}>{subtitle}</div>}
@@ -600,7 +600,7 @@ export default function AnalyticsTab({ source, reloadKey }: AnalyticsTabProps = 
               <Line
                 type="monotone"
                 dataKey="rolling_avg_3m"
-                stroke="#f59e0b"
+                stroke="var(--warning)"
                 strokeDasharray="5 5"
                 strokeWidth={2}
                 name="3-Month Avg"
@@ -625,7 +625,7 @@ export default function AnalyticsTab({ source, reloadKey }: AnalyticsTabProps = 
               <Tooltip content={<RichTooltip unit="€" />} cursor={{ fill: "rgba(148,163,184,0.08)" }} />
               <Legend />
               <Area type="monotone" dataKey="total_eur" stroke="#2563eb" fill="url(#totalGrad)" name="Monthly Total" strokeWidth={2} />
-              <Line type="monotone" dataKey="rolling_avg_3m" stroke="#f59e0b" strokeDasharray="5 5" name="3-Month Avg" strokeWidth={2} dot={false} />
+              <Line type="monotone" dataKey="rolling_avg_3m" stroke="var(--warning)" strokeDasharray="5 5" name="3-Month Avg" strokeWidth={2} dot={false} />
             </AreaChart>
           </ResponsiveContainer>
         </ChartCard>
@@ -674,14 +674,14 @@ export default function AnalyticsTab({ source, reloadKey }: AnalyticsTabProps = 
           </div>
 
           {/* Change table */}
-          <div style={{ background: "var(--surface-1)", border: "1px solid #2d3148", borderRadius: 12, overflow: "hidden", marginTop: 20 }}>
-            <div style={{ padding: "14px 20px", borderBottom: "1px solid #2d3148", fontSize: 14, fontWeight: 600, color: "var(--text-1)" }}>
+          <div style={{ background: "var(--surface-1)", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden", marginTop: 20 }}>
+            <div style={{ padding: "14px 20px", borderBottom: "1px solid var(--border)", fontSize: 14, fontWeight: 600, color: "var(--text-1)" }}>
               Change Metrics — All Months
             </div>
             <div style={{ overflowX: "auto" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+              <table style={{ width: "100%", minWidth: 640, borderCollapse: "collapse", fontSize: 13 }}>
                 <thead>
-                  <tr style={{ borderBottom: "1px solid #2d3148" }}>
+                  <tr style={{ borderBottom: "1px solid var(--border)" }}>
                     {["Month", "Total (€)", "MoM Change", "MoM (€)", "YoY Change", "YoY (€)"].map(h => (
                       <th key={h} style={{ padding: "10px 16px", textAlign: "left", color: "var(--text-3)", fontWeight: 600, fontSize: 11, textTransform: "uppercase", whiteSpace: "nowrap" }}>{h}</th>
                     ))}
@@ -689,7 +689,7 @@ export default function AnalyticsTab({ source, reloadKey }: AnalyticsTabProps = 
                 </thead>
                 <tbody>
                   {[...data.monthly_total].reverse().map((row, i) => (
-                    <tr key={row.month} style={{ borderBottom: i < data.monthly_total.length - 1 ? "1px solid #1e2132" : "none" }}>
+                    <tr key={row.month} style={{ borderBottom: i < data.monthly_total.length - 1 ? "1px solid var(--divider)" : "none" }}>
                       <td style={{ padding: "10px 16px", color: "var(--text-1)", fontWeight: 500 }}>{row.month}</td>
                       <td style={{ padding: "10px 16px", color: "var(--success)", fontVariantNumeric: "tabular-nums" }}>€{row.total_eur.toFixed(2)}</td>
                       <td style={{ padding: "10px 16px" }}><PctBadge v={row.mom_delta_pct} label="MoM" /></td>
@@ -865,11 +865,11 @@ export default function AnalyticsTab({ source, reloadKey }: AnalyticsTabProps = 
 
       {/* 8. Summary stats table */}
       <SectionTitle>🔢 8. Summary Statistics by Type</SectionTitle>
-      <div style={{ background: "var(--surface-1)", border: "1px solid #2d3148", borderRadius: 12, overflow: "hidden" }}>
+      <div style={{ background: "var(--surface-1)", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden" }}>
         <div style={{ overflowX: "auto" }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14, minWidth: 520 }}>
           <thead>
-            <tr style={{ borderBottom: "1px solid #2d3148" }}>
+            <tr style={{ borderBottom: "1px solid var(--border)" }}>
               {["Type", "Bills", "Total", "Avg/Month", "Min", "Max", "Consumption"].map(h => (
                 <th key={h} style={{ padding: "12px 16px", textAlign: "left", color: "var(--text-3)", fontWeight: 600, fontSize: 12, textTransform: "uppercase" }}>{h}</th>
               ))}
@@ -877,7 +877,7 @@ export default function AnalyticsTab({ source, reloadKey }: AnalyticsTabProps = 
           </thead>
           <tbody>
             {data.by_type.map((row, i) => (
-              <tr key={row.utility_type} style={{ borderBottom: i < data.by_type.length - 1 ? "1px solid #1e2132" : "none" }}>
+              <tr key={row.utility_type} style={{ borderBottom: i < data.by_type.length - 1 ? "1px solid var(--divider)" : "none" }}>
                 <td style={{ padding: "12px 16px" }}>
                   <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     <span style={{ width: 8, height: 8, borderRadius: "50%", background: colorFor(row.utility_type, i), display: "inline-block" }} />
@@ -975,14 +975,14 @@ export default function AnalyticsTab({ source, reloadKey }: AnalyticsTabProps = 
             </div>
           </ChartCard>
 
-          <div style={{ background: "var(--surface-1)", border: "1px solid #2d3148", borderRadius: 12, overflow: "hidden", marginTop: 20 }}>
-            <div style={{ padding: "14px 20px", borderBottom: "1px solid #2d3148", fontSize: 14, fontWeight: 600, color: "var(--text-1)" }}>
+          <div style={{ background: "var(--surface-1)", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden", marginTop: 20 }}>
+            <div style={{ padding: "14px 20px", borderBottom: "1px solid var(--border)", fontSize: 14, fontWeight: 600, color: "var(--text-1)" }}>
               Decomposition Table — All Months
             </div>
             <div style={{ overflowX: "auto" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+              <table style={{ width: "100%", minWidth: 700, borderCollapse: "collapse", fontSize: 13 }}>
                 <thead>
-                  <tr style={{ borderBottom: "1px solid #2d3148" }}>
+                  <tr style={{ borderBottom: "1px solid var(--border)" }}>
                     {["Line Item", "Month", "Price Effect", "Volume Effect", "Total Change", "Interpretation"].map(h => (
                       <th key={h} style={{ padding: "10px 16px", textAlign: "left", color: "var(--text-3)", fontWeight: 600, fontSize: 11, textTransform: "uppercase", whiteSpace: "nowrap" }}>{h}</th>
                     ))}
@@ -1001,13 +1001,13 @@ export default function AnalyticsTab({ source, reloadKey }: AnalyticsTabProps = 
                       r.priceEffect < -0.005 && r.volEffect > 0.005 ? "Cheaper rate, more used" :
                       "Mixed";
                     return (
-                      <tr key={i} style={{ borderBottom: "1px solid #1e2132" }}>
+                      <tr key={i} style={{ borderBottom: "1px solid var(--divider)" }}>
                         <td style={{ padding: "10px 16px", color: "var(--text-1)", maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.label}</td>
                         <td style={{ padding: "10px 16px", color: "var(--text-2)" }}>{r.month}</td>
                         <td style={{ padding: "10px 16px", color: r.priceEffect > 0 ? "var(--danger)" : r.priceEffect < 0 ? "var(--success)" : "var(--text-3)", fontVariantNumeric: "tabular-nums" }}>
                           {r.priceEffect > 0 ? "+" : ""}€{r.priceEffect.toFixed(2)}
                         </td>
-                        <td style={{ padding: "10px 16px", color: r.volEffect > 0 ? "#f59e0b" : r.volEffect < 0 ? "var(--success)" : "var(--text-3)", fontVariantNumeric: "tabular-nums" }}>
+                        <td style={{ padding: "10px 16px", color: r.volEffect > 0 ? "var(--warning)" : r.volEffect < 0 ? "var(--success)" : "var(--text-3)", fontVariantNumeric: "tabular-nums" }}>
                           {r.volEffect > 0 ? "+" : ""}€{r.volEffect.toFixed(2)}
                         </td>
                         <td style={{ padding: "10px 16px", color: r.total > 0 ? "var(--danger)" : r.total < 0 ? "var(--success)" : "var(--text-3)", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
@@ -1028,11 +1028,11 @@ export default function AnalyticsTab({ source, reloadKey }: AnalyticsTabProps = 
       {comparisonItems.length > 0 && prevMonthLabel && latestMonthLabel && (
         <>
           <SectionTitle>📋 12. Line-Item Comparison: {prevMonthLabel} vs {latestMonthLabel}</SectionTitle>
-          <div style={{ background: "var(--surface-1)", border: "1px solid #2d3148", borderRadius: 12, overflow: "hidden" }}>
+          <div style={{ background: "var(--surface-1)", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden" }}>
             <div style={{ overflowX: "auto" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+              <table style={{ width: "100%", minWidth: 700, borderCollapse: "collapse", fontSize: 13 }}>
                 <thead>
-                  <tr style={{ borderBottom: "1px solid #2d3148" }}>
+                  <tr style={{ borderBottom: "1px solid var(--border)" }}>
                     {["Line Item", `${prevMonthLabel} (€)`, `${latestMonthLabel} (€)`, "Change (€)", "Unit price change", "Qty change"].map(h => (
                       <th key={h} style={{ padding: "10px 16px", textAlign: "left", color: "var(--text-3)", fontWeight: 600, fontSize: 11, textTransform: "uppercase", whiteSpace: "nowrap" }}>{h}</th>
                     ))}
@@ -1040,7 +1040,7 @@ export default function AnalyticsTab({ source, reloadKey }: AnalyticsTabProps = 
                 </thead>
                 <tbody>
                   {comparisonItems.map((row, i) => (
-                    <tr key={i} style={{ borderBottom: i < comparisonItems.length - 1 ? "1px solid #1e2132" : "none", background: Math.abs(row.amtDiff) > 10 ? "rgba(239,68,68,0.04)" : "transparent" }}>
+                    <tr key={i} style={{ borderBottom: i < comparisonItems.length - 1 ? "1px solid var(--divider)" : "none", background: Math.abs(row.amtDiff) > 10 ? "rgba(239,68,68,0.04)" : "transparent" }}>
                       <td style={{ padding: "10px 16px", color: "var(--text-1)", maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{row.label}</td>
                       <td style={{ padding: "10px 16px", color: "var(--text-2)", fontVariantNumeric: "tabular-nums" }}>
                         {row.prev ? `€${row.prev.amount_eur.toFixed(2)}` : "—"}

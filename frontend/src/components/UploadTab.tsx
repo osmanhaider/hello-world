@@ -280,7 +280,9 @@ export default function UploadTab({ onSuccess, onRunningChange, isActive }: Uplo
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: byokKeys.length > 0 ? "repeat(3, 1fr)" : "1fr 1fr",
+            gridTemplateColumns: byokKeys.length > 0
+              ? "repeat(auto-fit, minmax(150px, 1fr))"
+              : "repeat(auto-fit, minmax(180px, 1fr))",
             gap: 8,
             marginBottom: parserMode === "freellmapi" || parserMode === "byok" ? 12 : 0,
           }}

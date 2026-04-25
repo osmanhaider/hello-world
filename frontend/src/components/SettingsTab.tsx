@@ -278,7 +278,7 @@ export default function SettingsTab() {
         Add a new key
       </h3>
       <form onSubmit={onAdd} style={{ ...cardStyle, display: "flex", flexDirection: "column", gap: 12 }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
           <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             <span style={{ fontSize: 12, color: "var(--text-2)" }}>Provider</span>
             <select

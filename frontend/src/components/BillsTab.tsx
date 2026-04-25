@@ -141,6 +141,19 @@ export default function BillsTab({ onDataChange }: BillsTabProps = {}) {
     borderRadius: "var(--radius)",
     border: "1px solid var(--border)",
   } as const;
+  const rowIconButtonStyle: React.CSSProperties = {
+    background: "none",
+    border: "none",
+    cursor: "pointer",
+    padding: 0,
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    flexShrink: 0,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+  };
   const inputStyle = {
     background: "var(--surface-2)",
     border: "1px solid var(--border)",
@@ -328,9 +341,8 @@ export default function BillsTab({ onDataChange }: BillsTabProps = {}) {
                   onClick={e => togglePrivate(bill, e)}
                   title={bill.is_private ? "Private — only you can see this bill. Click to make it public." : "Public — visible to all signed-in users. Click to make it private."}
                   style={{
-                    background: "none", border: "none", cursor: "pointer",
+                    ...rowIconButtonStyle,
                     color: bill.is_private ? "var(--warning)" : "var(--success)",
-                    padding: 4, borderRadius: 4, flexShrink: 0,
                   }}
                 >
                   {bill.is_private ? <Lock size={15} /> : <Globe size={15} />}
@@ -338,8 +350,8 @@ export default function BillsTab({ onDataChange }: BillsTabProps = {}) {
                 <button
                   onClick={e => deleteBill(bill.id, e)}
                   style={{
-                    background: "none", border: "none", cursor: "pointer",
-                    color: "var(--text-3)", padding: 4, borderRadius: 4, flexShrink: 0,
+                    ...rowIconButtonStyle,
+                    color: "var(--text-3)",
                   }}
                 >
                   <Trash2 size={15} />

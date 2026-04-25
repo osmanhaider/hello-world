@@ -113,17 +113,20 @@ export default function App() {
           backdropFilter: "saturate(140%) blur(10px)",
           WebkitBackdropFilter: "saturate(140%) blur(10px)",
           borderBottom: "1px solid var(--border)",
-          padding: isMobile ? "10px 14px" : "14px 24px",
+          padding: isMobile ? "8px 10px" : "14px 24px",
           display: "flex",
           alignItems: "center",
-          gap: isMobile ? 8 : 16,
+          gap: isMobile ? 6 : 16,
+          overflowX: isMobile ? "auto" : "visible",
+          WebkitOverflowScrolling: "touch",
+          scrollbarWidth: "none",
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 8 : 12 }}>
           <div
             style={{
-              width: 34,
-              height: 34,
+              width: isMobile ? 30 : 34,
+              height: isMobile ? 30 : 34,
               background: "linear-gradient(135deg, var(--accent), var(--accent-strong))",
               borderRadius: 10,
               display: "flex",
@@ -151,6 +154,7 @@ export default function App() {
             display: "flex",
             gap: isMobile ? 2 : 4,
             alignItems: "center",
+            minWidth: isMobile ? "max-content" : undefined,
           }}
         >
           {          ([
@@ -173,7 +177,7 @@ export default function App() {
                   display: "flex",
                   alignItems: "center",
                   gap: 6,
-                  padding: isMobile ? "8px 10px" : "8px 14px",
+                  padding: isMobile ? "10px 11px" : "8px 14px",
                   borderRadius: 8,
                   border: "1px solid",
                   borderColor: active ? "transparent" : "transparent",
@@ -207,7 +211,7 @@ export default function App() {
             );
           })}
 
-          <span style={{ width: 8, display: "inline-block" }} />
+          <span style={{ width: isMobile ? 2 : 8, display: "inline-block" }} />
           <ThemeToggle compact={isMobile} />
 
           {me && (
