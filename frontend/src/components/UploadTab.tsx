@@ -82,10 +82,21 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
         ? (selectedModel === "__custom__" ? customModel.trim() : selectedModel)
         : undefined;
 
+    // Free-tier providers (Gemini, etc.) cap at ~10 requests/minute. Pace
+    // multi-file batches when going through FreeLLMAPI so we stay under
+    // their per-minute window. Local OCR has no rate limit.
+    const pendingCount = items.filter(it => it.status === "pending").length;
+    const paceMs = parserMode === "freellmapi" && pendingCount > 1 ? 6500 : 0;
+
     let successCount = 0;
     let problemCount = 0;
+    let firstUpload = true;
     for (const item of items) {
       if (item.status !== "pending") continue;
+      if (!firstUpload && paceMs > 0) {
+        await new Promise(resolve => setTimeout(resolve, paceMs));
+      }
+      firstUpload = false;
       updateItem(item.id, { status: "uploading" });
       try {
         const res = await api.uploadBill(item.file, parserMode, effectiveModel || undefined);
@@ -385,10 +396,18 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
             ) : null}
             <div style={{ color: "var(--text-1)", fontSize: 13, lineHeight: 1.5 }}>
               {parserMode === "freellmapi" ? (
-                <>
-                  Try a different model from the dropdown, or check that FreeLLMAPI
-                  has healthy provider keys configured.
-                </>
+                typeof parsed.error === "string" && /rate limit|exhausted/i.test(parsed.error) ? (
+                  <>
+                    Your provider hit its per-minute rate limit. Wait ~60 seconds
+                    and re-upload, or add another provider key to FreeLLMAPI so
+                    the router can fall over automatically.
+                  </>
+                ) : (
+                  <>
+                    Try a different model from the dropdown, or check that FreeLLMAPI
+                    has healthy provider keys configured.
+                  </>
+                )
               ) : (
                 <>
                   The local OCR parser found very little data. Switch to{" "}

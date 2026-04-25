@@ -3,19 +3,33 @@ FreeLLMAPI invoice parser.
 
 FreeLLMAPI currently accepts text-only OpenAI-compatible chat requests, so this
 parser first extracts text locally, then asks FreeLLMAPI to produce the bill JSON.
+
+Multi-bill batches on free-tier provider keys often hit per-minute rate limits
+(Gemini free is ~10 RPM). We absorb those with bounded retries and a clearer
+error message so the user knows what to wait for.
 """
 from __future__ import annotations
 
 import json
+import logging
 import os
+import time
 
 import httpx
 
 from parser import extract_bill_text
 
+logger = logging.getLogger("utility_tracker")
+
 # Big enough for korteriühistu bills with 15+ line items + Estonian/English
 # translations. Override with FREELLMAPI_MAX_TOKENS if a future format needs more.
 DEFAULT_MAX_TOKENS = int(os.environ.get("FREELLMAPI_MAX_TOKENS", 10000))
+
+# Retry configuration for transient errors (rate limits, provider exhaustion,
+# upstream 5xx). These tend to clear within seconds; a small backoff usually
+# rescues a multi-file upload that would otherwise show partial failures.
+MAX_RETRIES = int(os.environ.get("FREELLMAPI_MAX_RETRIES", 3))
+RETRY_BASE_DELAY_SEC = float(os.environ.get("FREELLMAPI_RETRY_BASE_DELAY_SEC", 4.0))
 
 _EXTRACTION_PROMPT = """You are an expert at reading invoices and bills of any type: utilities
 (electricity, gas, water, heating, internet, waste), subscriptions, services, rent,
@@ -114,6 +128,43 @@ def _loads_json_from_model(text: str, model: str) -> dict:
     return parsed
 
 
+def _is_rate_limit_response(status_code: int, body: object) -> bool:
+    """A rate-limit error from any layer in the stack — Gemini, FreeLLMAPI's
+    own router, or the OpenAI-compatible glue. Treated as retryable."""
+    if status_code == 429:
+        return True
+    if not isinstance(body, dict):
+        return False
+    err = body.get("error") if isinstance(body.get("error"), dict) else {}
+    err_type = (err.get("type") or "").lower()
+    err_msg = (err.get("message") or "").lower()
+    if err_type in {"rate_limit_error", "routing_error"}:
+        return True
+    if "rate limit" in err_msg or "exhausted" in err_msg or "429" in err_msg:
+        return True
+    return False
+
+
+def _is_transient_status(status_code: int) -> bool:
+    """5xx and a couple of well-known transient codes from upstream proxies."""
+    return status_code == 408 or status_code == 425 or 500 <= status_code <= 599
+
+
+def _friendly_rate_limit_error(detail: object) -> str:
+    """Build the single-line message we surface back to the UI when the
+    final retry has failed because of upstream rate limits."""
+    upstream = ""
+    if isinstance(detail, dict):
+        err = detail.get("error") if isinstance(detail.get("error"), dict) else {}
+        upstream = err.get("message") or ""
+    suffix = f" Upstream said: {upstream}" if upstream else ""
+    return (
+        "Provider rate limit hit and retries exhausted. Wait ~1 minute or add "
+        "another provider key to FreeLLMAPI so the router can fall over."
+        + suffix
+    )
+
+
 def parse_bill_with_freellmapi(
     file_path: str,
     base_url: str,
@@ -138,17 +189,43 @@ def parse_bill_with_freellmapi(
         ],
     }
 
-    with httpx.Client(timeout=90.0) as client:
-        response = client.post(_chat_completions_url(base_url), headers=headers, json=payload)
+    response: httpx.Response | None = None
+    last_detail: object = None
+    with httpx.Client(timeout=120.0) as client:
+        for attempt in range(MAX_RETRIES + 1):
+            response = client.post(_chat_completions_url(base_url), headers=headers, json=payload)
+            if response.is_success:
+                break
 
-    try:
-        response.raise_for_status()
-    except httpx.HTTPStatusError as e:
-        try:
-            detail = response.json()
-        except json.JSONDecodeError:
-            detail = response.text
-        raise RuntimeError(f"FreeLLMAPI request failed: {detail}") from e
+            try:
+                last_detail = response.json()
+            except json.JSONDecodeError:
+                last_detail = response.text
+
+            transient = _is_rate_limit_response(response.status_code, last_detail) \
+                or _is_transient_status(response.status_code)
+            if not transient or attempt >= MAX_RETRIES:
+                break
+
+            # Honor the upstream Retry-After header when present, otherwise
+            # back off exponentially: 4s, 8s, 16s.
+            retry_after = response.headers.get("retry-after")
+            try:
+                wait = float(retry_after) if retry_after else RETRY_BASE_DELAY_SEC * (2 ** attempt)
+            except ValueError:
+                wait = RETRY_BASE_DELAY_SEC * (2 ** attempt)
+            wait = min(wait, 30.0)
+            logger.info(
+                "FreeLLMAPI returned %s on attempt %d/%d, retrying in %.1fs",
+                response.status_code, attempt + 1, MAX_RETRIES + 1, wait,
+            )
+            time.sleep(wait)
+
+    assert response is not None  # the loop runs at least once
+    if not response.is_success:
+        if _is_rate_limit_response(response.status_code, last_detail):
+            raise RuntimeError(_friendly_rate_limit_error(last_detail))
+        raise RuntimeError(f"FreeLLMAPI request failed: {last_detail}")
 
     body = response.json()
     try:
