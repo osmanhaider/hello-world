@@ -100,24 +100,24 @@ function RichTooltip({
       padding: "10px 14px", fontSize: 12,
       minWidth: 180, boxShadow: "0 10px 30px rgba(0,0,0,0.4)",
     }}>
-      {labelText && <div style={{ color: "#e5e7eb", fontWeight: 600, marginBottom: 8, fontSize: 12 }}>{labelText}</div>}
+      {labelText && <div style={{ color: "var(--text-1)", fontWeight: 600, marginBottom: 8, fontSize: 12 }}>{labelText}</div>}
       {shown.map((p, i) => (
         <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3, justifyContent: "space-between" }}>
           <span style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
             <span style={{ width: 8, height: 8, borderRadius: 2, background: p.color, flexShrink: 0 }} />
-            <span style={{ color: "#d1d5db", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 160 }}>{p.name}</span>
+            <span style={{ color: "var(--text-1)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 160 }}>{p.name}</span>
           </span>
-          <span style={{ color: "#f3f4f6", fontVariantNumeric: "tabular-nums", fontWeight: 500, marginLeft: 12 }}>{fmt(p.value)}</span>
+          <span style={{ color: "var(--text-1)", fontVariantNumeric: "tabular-nums", fontWeight: 500, marginLeft: 12 }}>{fmt(p.value)}</span>
         </div>
       ))}
       {hidden.length > 0 && (
-        <div style={{ display: "flex", justifyContent: "space-between", color: "#6b7280", marginTop: 4, fontSize: 11 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", color: "var(--text-3)", marginTop: 4, fontSize: 11 }}>
           <span>+{hidden.length} more</span>
           <span style={{ fontVariantNumeric: "tabular-nums" }}>{fmt(hiddenTotal)}</span>
         </div>
       )}
       {showTotal && items.length > 1 && (
-        <div style={{ display: "flex", justifyContent: "space-between", borderTop: "1px solid #374151", marginTop: 8, paddingTop: 6, color: "#e5e7eb", fontWeight: 600 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", borderTop: "1px solid #374151", marginTop: 8, paddingTop: 6, color: "var(--text-1)", fontWeight: 600 }}>
           <span>Total</span>
           <span style={{ fontVariantNumeric: "tabular-nums" }}>{fmt(total)}</span>
         </div>
@@ -128,32 +128,32 @@ function RichTooltip({
 
 
 function PctBadge({ v, label }: { v: number | null; label: string }) {
-  if (v == null) return <span style={{ color: "#4b5563", fontSize: 12 }}>—</span>;
+  if (v == null) return <span style={{ color: "var(--text-3)", fontSize: 12 }}>—</span>;
   const pos = v > 0;
   const flat = Math.abs(v) < 0.5;
   return (
     <span style={{
       display: "inline-flex", alignItems: "center", gap: 4,
-      color: flat ? "#9ca3af" : pos ? "#ef4444" : "#22c55e",
+      color: flat ? "var(--text-2)" : pos ? "var(--danger)" : "var(--success)",
       fontSize: 13, fontWeight: 600, fontVariantNumeric: "tabular-nums",
     }}>
       {flat ? <Minus size={12} /> : pos ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
       {pos ? "+" : ""}{v.toFixed(1)}%
-      <span style={{ color: "#6b7280", fontWeight: 400, fontSize: 11 }}>{label}</span>
+      <span style={{ color: "var(--text-3)", fontWeight: 400, fontSize: 11 }}>{label}</span>
     </span>
   );
 }
 
 function StatCard({ label, value, sub, trend }: { label: string; value: string; sub?: string; trend?: "up" | "down" | "flat" }) {
   return (
-    <div style={{ background: "#1a1d27", border: "1px solid #2d3148", borderRadius: 12, padding: "20px 24px" }}>
-      <div style={{ fontSize: 12, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>{label}</div>
-      <div style={{ fontSize: 28, fontWeight: 700, color: "white" }}>{value}</div>
+    <div style={{ background: "var(--surface-1)", border: "1px solid #2d3148", borderRadius: 12, padding: "20px 24px" }}>
+      <div style={{ fontSize: 12, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>{label}</div>
+      <div style={{ fontSize: 28, fontWeight: 700, color: "var(--text-1)" }}>{value}</div>
       {sub && (
-        <div style={{ fontSize: 12, color: "#9ca3af", marginTop: 4, display: "flex", alignItems: "center", gap: 4 }}>
-          {trend === "up" && <TrendingUp size={12} color="#ef4444" />}
-          {trend === "down" && <TrendingDown size={12} color="#22c55e" />}
-          {trend === "flat" && <Minus size={12} color="#9ca3af" />}
+        <div style={{ fontSize: 12, color: "var(--text-2)", marginTop: 4, display: "flex", alignItems: "center", gap: 4 }}>
+          {trend === "up" && <TrendingUp size={12} color="var(--danger)" />}
+          {trend === "down" && <TrendingDown size={12} color="var(--success)" />}
+          {trend === "flat" && <Minus size={12} color="var(--text-2)" />}
           {sub}
         </div>
       )}
@@ -162,15 +162,15 @@ function StatCard({ label, value, sub, trend }: { label: string; value: string; 
 }
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
-  return <h3 style={{ color: "white", fontSize: 16, fontWeight: 600, margin: "32px 0 16px" }}>{children}</h3>;
+  return <h3 style={{ color: "var(--text-1)", fontSize: 16, fontWeight: 600, margin: "32px 0 16px" }}>{children}</h3>;
 }
 
 function ChartCard({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
   return (
-    <div style={{ background: "#1a1d27", border: "1px solid #2d3148", borderRadius: 12, padding: 24 }}>
+    <div style={{ background: "var(--surface-1)", border: "1px solid #2d3148", borderRadius: 12, padding: 24 }}>
       <div style={{ marginBottom: 20 }}>
-        <div style={{ fontSize: 15, fontWeight: 600, color: "white" }}>{title}</div>
-        {subtitle && <div style={{ fontSize: 12, color: "#6b7280", marginTop: 4 }}>{subtitle}</div>}
+        <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text-1)" }}>{title}</div>
+        {subtitle && <div style={{ fontSize: 12, color: "var(--text-3)", marginTop: 4 }}>{subtitle}</div>}
       </div>
       {children}
     </div>
@@ -220,6 +220,11 @@ export default function AnalyticsTab({ source, reloadKey }: AnalyticsTabProps = 
     setExporting(true);
     setExportError(null);
     try {
+      // Resolve the current theme background so the PDF matches the on-screen
+      // surface (dark slate or cream) instead of a hard-coded color.
+      const themeBg =
+        getComputedStyle(document.documentElement).getPropertyValue("--bg").trim() ||
+        "#0c111c";
       const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
       const pageWidth = pdf.internal.pageSize.getWidth();   // 210mm
       const pageHeight = pdf.internal.pageSize.getHeight(); // 297mm
@@ -236,7 +241,7 @@ export default function AnalyticsTab({ source, reloadKey }: AnalyticsTabProps = 
 
       for (const child of children) {
         const canvas = await html2canvas(child, {
-          backgroundColor: "#0b0d14",
+          backgroundColor: themeBg,
           scale: 2,
           useCORS: true,
           logging: false,
@@ -274,7 +279,7 @@ export default function AnalyticsTab({ source, reloadKey }: AnalyticsTabProps = 
           slice.height = sliceHpx;
           const ctx = slice.getContext("2d");
           if (ctx) {
-            ctx.fillStyle = "#0b0d14";
+            ctx.fillStyle = themeBg;
             ctx.fillRect(0, 0, slice.width, slice.height);
             ctx.drawImage(canvas, 0, srcY, canvas.width, sliceHpx, 0, 0, canvas.width, sliceHpx);
           }
@@ -302,14 +307,14 @@ export default function AnalyticsTab({ source, reloadKey }: AnalyticsTabProps = 
   }
 
   if (loading) return (
-    <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: 200, gap: 12, color: "#9ca3af" }}>
+    <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: 200, gap: 12, color: "var(--text-2)" }}>
       <Loader2 size={24} style={{ animation: "spin 1s linear infinite" }} /> Loading analytics…
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 
   if (!data || data.monthly_total.length === 0) return (
-    <div style={{ textAlign: "center", padding: 80, color: "#6b7280" }}>
+    <div style={{ textAlign: "center", padding: 80, color: "var(--text-3)" }}>
       <AlertCircle size={40} style={{ marginBottom: 12 }} />
       <p>No data yet. Upload some bills to see analytics!</p>
     </div>
@@ -473,8 +478,8 @@ export default function AnalyticsTab({ source, reloadKey }: AnalyticsTabProps = 
     <div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24, flexWrap: "wrap", gap: 8 }}>
         <div>
-          <h2 style={{ color: "white", margin: 0, fontSize: 22 }}>Analytics Dashboard</h2>
-          <p style={{ color: "#9ca3af", margin: "4px 0 0", fontSize: 13 }}>
+          <h2 style={{ color: "var(--text-1)", margin: 0, fontSize: 22 }}>Analytics Dashboard</h2>
+          <p style={{ color: "var(--text-2)", margin: "4px 0 0", fontSize: 13 }}>
             {data.totals.bill_count} bills · {types.length} utility types
           </p>
         </div>
@@ -486,8 +491,8 @@ export default function AnalyticsTab({ source, reloadKey }: AnalyticsTabProps = 
             alignItems: "center",
             gap: 8,
             padding: "10px 16px",
-            background: exporting ? "#374151" : "#2563eb",
-            color: "white",
+            background: exporting ? "var(--border-strong)" : "var(--accent)",
+            color: "var(--text-1)",
             border: "none",
             borderRadius: 8,
             fontSize: 13,
@@ -495,8 +500,8 @@ export default function AnalyticsTab({ source, reloadKey }: AnalyticsTabProps = 
             cursor: exporting ? "wait" : "pointer",
             transition: "background 120ms",
           }}
-          onMouseEnter={e => { if (!exporting) e.currentTarget.style.background = "#1d4ed8"; }}
-          onMouseLeave={e => { if (!exporting) e.currentTarget.style.background = "#2563eb"; }}
+          onMouseEnter={e => { if (!exporting) e.currentTarget.style.background = "var(--accent-strong)"; }}
+          onMouseLeave={e => { if (!exporting) e.currentTarget.style.background = "var(--accent)"; }}
         >
           {exporting ? (
             <>
@@ -514,7 +519,7 @@ export default function AnalyticsTab({ source, reloadKey }: AnalyticsTabProps = 
 
       {exportError && (
         <div style={{
-          background: "#2a1818",
+          background: "var(--danger-soft)",
           border: "1px solid #7f1d1d",
           borderLeft: "3px solid #ef4444",
           borderRadius: 8,
@@ -524,16 +529,16 @@ export default function AnalyticsTab({ source, reloadKey }: AnalyticsTabProps = 
           gap: 12,
           alignItems: "flex-start",
         }}>
-          <AlertCircle size={18} color="#ef4444" style={{ flexShrink: 0, marginTop: 1 }} />
+          <AlertCircle size={18} color="var(--danger)" style={{ flexShrink: 0, marginTop: 1 }} />
           <div style={{ flex: 1 }}>
-            <div style={{ color: "#fca5a5", fontWeight: 600, fontSize: 13, marginBottom: 2 }}>
+            <div style={{ color: "var(--danger)", fontWeight: 600, fontSize: 13, marginBottom: 2 }}>
               PDF export failed
             </div>
-            <div style={{ color: "#d1d5db", fontSize: 12 }}>{exportError}</div>
+            <div style={{ color: "var(--text-1)", fontSize: 12 }}>{exportError}</div>
           </div>
           <button
             onClick={() => setExportError(null)}
-            style={{ background: "transparent", border: "none", color: "#6b7280", cursor: "pointer", fontSize: 18, lineHeight: 1 }}
+            style={{ background: "transparent", border: "none", color: "var(--text-3)", cursor: "pointer", fontSize: 18, lineHeight: 1 }}
             aria-label="Dismiss"
           >×</button>
         </div>
@@ -572,9 +577,9 @@ export default function AnalyticsTab({ source, reloadKey }: AnalyticsTabProps = 
         <ChartCard title="Total Monthly Spend — Line" subtitle="Clean line chart of monthly total with labeled points">
           <ResponsiveContainer width="100%" height={chartH(260)}>
             <LineChart data={data.monthly_total} margin={{ top: 20, right: 20, left: 0, bottom: 5 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#2d3148" vertical={false} />
-              <XAxis dataKey="month" tick={{ fill: "#94a3b8", fontSize: 11 }} tickFormatter={fmtMonthShort} interval="preserveStartEnd" minTickGap={24} />
-              <YAxis tick={{ fill: "#6b7280", fontSize: 12 }} tickFormatter={v => `€${v}`} />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+              <XAxis dataKey="month" tick={{ fill: "var(--text-2)", fontSize: 11 }} tickFormatter={fmtMonthShort} interval="preserveStartEnd" minTickGap={24} />
+              <YAxis tick={{ fill: "var(--text-3)", fontSize: 12 }} tickFormatter={v => `€${v}`} />
               <Tooltip content={<RichTooltip unit="€" />} cursor={{ fill: "rgba(148,163,184,0.08)" }} />
               <Legend />
               <Line
@@ -583,11 +588,11 @@ export default function AnalyticsTab({ source, reloadKey }: AnalyticsTabProps = 
                 stroke="#2563eb"
                 strokeWidth={3}
                 name="Monthly Total"
-                dot={{ r: 5, fill: "#2563eb", strokeWidth: 2, stroke: "#0b0d14" }}
+                dot={{ r: 5, fill: "#2563eb", strokeWidth: 2, stroke: "var(--bg)" }}
                 activeDot={{ r: 7 }}
                 label={{
                   position: "top",
-                  fill: "#e5e7eb",
+                  fill: "var(--text-1)",
                   fontSize: 11,
                   formatter: (v: unknown) => `€${(v as number).toFixed(0)}`,
                 }}
@@ -614,9 +619,9 @@ export default function AnalyticsTab({ source, reloadKey }: AnalyticsTabProps = 
                   <stop offset="95%" stopColor="#2563eb" stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#2d3148" vertical={false} />
-              <XAxis dataKey="month" tick={{ fill: "#94a3b8", fontSize: 11 }} tickFormatter={fmtMonthShort} interval="preserveStartEnd" minTickGap={24} />
-              <YAxis tick={{ fill: "#6b7280", fontSize: 12 }} tickFormatter={v => `€${v}`} />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+              <XAxis dataKey="month" tick={{ fill: "var(--text-2)", fontSize: 11 }} tickFormatter={fmtMonthShort} interval="preserveStartEnd" minTickGap={24} />
+              <YAxis tick={{ fill: "var(--text-3)", fontSize: 12 }} tickFormatter={v => `€${v}`} />
               <Tooltip content={<RichTooltip unit="€" />} cursor={{ fill: "rgba(148,163,184,0.08)" }} />
               <Legend />
               <Area type="monotone" dataKey="total_eur" stroke="#2563eb" fill="url(#totalGrad)" name="Monthly Total" strokeWidth={2} />
@@ -635,13 +640,13 @@ export default function AnalyticsTab({ source, reloadKey }: AnalyticsTabProps = 
               <ChartCard title="Month-over-Month Change" subtitle="Green = cheaper than previous month · Red = more expensive">
                 <ResponsiveContainer width="100%" height={chartH(260)}>
                   <BarChart data={momRows}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#2d3148" vertical={false} />
-                    <XAxis dataKey="month" tick={{ fill: "#94a3b8", fontSize: 11 }} tickFormatter={fmtMonthShort} interval="preserveStartEnd" minTickGap={24} />
-                    <YAxis tick={{ fill: "#6b7280", fontSize: 12 }} tickFormatter={v => `${v}%`} />
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                    <XAxis dataKey="month" tick={{ fill: "var(--text-2)", fontSize: 11 }} tickFormatter={fmtMonthShort} interval="preserveStartEnd" minTickGap={24} />
+                    <YAxis tick={{ fill: "var(--text-3)", fontSize: 12 }} tickFormatter={v => `${v}%`} />
                     <Tooltip content={<RichTooltip unit="%" showTotal={false} maxItems={2} />} cursor={{ fill: "rgba(148,163,184,0.08)" }} />
                     <Bar dataKey="delta" name="MoM %" radius={[3, 3, 0, 0]}>
                       {momRows.map((r, i) => (
-                        <Cell key={i} fill={r.delta > 0 ? "#ef4444" : "#22c55e"} />
+                        <Cell key={i} fill={r.delta > 0 ? "var(--danger)" : "var(--success)"} />
                       ))}
                     </Bar>
                   </BarChart>
@@ -653,13 +658,13 @@ export default function AnalyticsTab({ source, reloadKey }: AnalyticsTabProps = 
               <ChartCard title="Year-over-Year Change" subtitle="Green = cheaper than same month last year · Red = more expensive">
                 <ResponsiveContainer width="100%" height={chartH(260)}>
                   <BarChart data={yoyRows}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#2d3148" vertical={false} />
-                    <XAxis dataKey="month" tick={{ fill: "#94a3b8", fontSize: 11 }} tickFormatter={fmtMonthShort} interval="preserveStartEnd" minTickGap={24} />
-                    <YAxis tick={{ fill: "#6b7280", fontSize: 12 }} tickFormatter={v => `${v}%`} />
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                    <XAxis dataKey="month" tick={{ fill: "var(--text-2)", fontSize: 11 }} tickFormatter={fmtMonthShort} interval="preserveStartEnd" minTickGap={24} />
+                    <YAxis tick={{ fill: "var(--text-3)", fontSize: 12 }} tickFormatter={v => `${v}%`} />
                     <Tooltip content={<RichTooltip unit="%" showTotal={false} maxItems={2} />} cursor={{ fill: "rgba(148,163,184,0.08)" }} />
                     <Bar dataKey="delta" name="YoY %" radius={[3, 3, 0, 0]}>
                       {yoyRows.map((r, i) => (
-                        <Cell key={i} fill={r.delta > 0 ? "#ef4444" : "#22c55e"} />
+                        <Cell key={i} fill={r.delta > 0 ? "var(--danger)" : "var(--success)"} />
                       ))}
                     </Bar>
                   </BarChart>
@@ -669,8 +674,8 @@ export default function AnalyticsTab({ source, reloadKey }: AnalyticsTabProps = 
           </div>
 
           {/* Change table */}
-          <div style={{ background: "#1a1d27", border: "1px solid #2d3148", borderRadius: 12, overflow: "hidden", marginTop: 20 }}>
-            <div style={{ padding: "14px 20px", borderBottom: "1px solid #2d3148", fontSize: 14, fontWeight: 600, color: "#e5e7eb" }}>
+          <div style={{ background: "var(--surface-1)", border: "1px solid #2d3148", borderRadius: 12, overflow: "hidden", marginTop: 20 }}>
+            <div style={{ padding: "14px 20px", borderBottom: "1px solid #2d3148", fontSize: 14, fontWeight: 600, color: "var(--text-1)" }}>
               Change Metrics — All Months
             </div>
             <div style={{ overflowX: "auto" }}>
@@ -678,21 +683,21 @@ export default function AnalyticsTab({ source, reloadKey }: AnalyticsTabProps = 
                 <thead>
                   <tr style={{ borderBottom: "1px solid #2d3148" }}>
                     {["Month", "Total (€)", "MoM Change", "MoM (€)", "YoY Change", "YoY (€)"].map(h => (
-                      <th key={h} style={{ padding: "10px 16px", textAlign: "left", color: "#6b7280", fontWeight: 600, fontSize: 11, textTransform: "uppercase", whiteSpace: "nowrap" }}>{h}</th>
+                      <th key={h} style={{ padding: "10px 16px", textAlign: "left", color: "var(--text-3)", fontWeight: 600, fontSize: 11, textTransform: "uppercase", whiteSpace: "nowrap" }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {[...data.monthly_total].reverse().map((row, i) => (
                     <tr key={row.month} style={{ borderBottom: i < data.monthly_total.length - 1 ? "1px solid #1e2132" : "none" }}>
-                      <td style={{ padding: "10px 16px", color: "#e5e7eb", fontWeight: 500 }}>{row.month}</td>
-                      <td style={{ padding: "10px 16px", color: "#22c55e", fontVariantNumeric: "tabular-nums" }}>€{row.total_eur.toFixed(2)}</td>
+                      <td style={{ padding: "10px 16px", color: "var(--text-1)", fontWeight: 500 }}>{row.month}</td>
+                      <td style={{ padding: "10px 16px", color: "var(--success)", fontVariantNumeric: "tabular-nums" }}>€{row.total_eur.toFixed(2)}</td>
                       <td style={{ padding: "10px 16px" }}><PctBadge v={row.mom_delta_pct} label="MoM" /></td>
-                      <td style={{ padding: "10px 16px", color: row.mom_delta_eur == null ? "#4b5563" : row.mom_delta_eur > 0 ? "#ef4444" : "#22c55e", fontVariantNumeric: "tabular-nums", fontSize: 13 }}>
+                      <td style={{ padding: "10px 16px", color: row.mom_delta_eur == null ? "var(--text-3)" : row.mom_delta_eur > 0 ? "var(--danger)" : "var(--success)", fontVariantNumeric: "tabular-nums", fontSize: 13 }}>
                         {row.mom_delta_eur != null ? `${row.mom_delta_eur > 0 ? "+" : ""}€${row.mom_delta_eur.toFixed(2)}` : "—"}
                       </td>
                       <td style={{ padding: "10px 16px" }}><PctBadge v={row.yoy_delta_pct} label="YoY" /></td>
-                      <td style={{ padding: "10px 16px", color: row.yoy_delta_eur == null ? "#4b5563" : row.yoy_delta_eur > 0 ? "#ef4444" : "#22c55e", fontVariantNumeric: "tabular-nums", fontSize: 13 }}>
+                      <td style={{ padding: "10px 16px", color: row.yoy_delta_eur == null ? "var(--text-3)" : row.yoy_delta_eur > 0 ? "var(--danger)" : "var(--success)", fontVariantNumeric: "tabular-nums", fontSize: 13 }}>
                         {row.yoy_delta_eur != null ? `${row.yoy_delta_eur > 0 ? "+" : ""}€${row.yoy_delta_eur.toFixed(2)}` : "—"}
                       </td>
                     </tr>
@@ -710,9 +715,9 @@ export default function AnalyticsTab({ source, reloadKey }: AnalyticsTabProps = 
         <ChartCard title="Monthly Stacked by Type" subtitle="See which utilities drive costs each month">
           <ResponsiveContainer width="100%" height={chartH(320)}>
             <BarChart data={stackedRows} margin={{ top: 10, right: 10, left: 0, bottom: 5 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#2d3148" vertical={false} />
-              <XAxis dataKey="month" tick={{ fill: "#94a3b8", fontSize: 11 }} tickFormatter={fmtMonthShort} interval="preserveStartEnd" minTickGap={24} />
-              <YAxis tick={{ fill: "#94a3b8", fontSize: 11 }} tickFormatter={v => `€${v}`} />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+              <XAxis dataKey="month" tick={{ fill: "var(--text-2)", fontSize: 11 }} tickFormatter={fmtMonthShort} interval="preserveStartEnd" minTickGap={24} />
+              <YAxis tick={{ fill: "var(--text-2)", fontSize: 11 }} tickFormatter={v => `€${v}`} />
               <Tooltip content={<RichTooltip unit="€" maxItems={7} />} cursor={{ fill: "rgba(148,163,184,0.08)" }} />
               <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} iconSize={10} />
               {types.map((t, i) => (
@@ -760,7 +765,7 @@ export default function AnalyticsTab({ source, reloadKey }: AnalyticsTabProps = 
                 verticalAlign="bottom"
                 iconType="circle"
                 wrapperStyle={{ fontSize: 12, paddingTop: 8 }}
-                formatter={(value: string) => <span style={{ color: "#e5e7eb" }}>{labelFor(value)}</span>}
+                formatter={(value: string) => <span style={{ color: "var(--text-1)" }}>{labelFor(value)}</span>}
               />
             </PieChart>
           </ResponsiveContainer>
@@ -773,9 +778,9 @@ export default function AnalyticsTab({ source, reloadKey }: AnalyticsTabProps = 
         <ChartCard title="Average Bill by Calendar Month" subtitle="Reveals heating spikes in winter, A/C in summer">
           <ResponsiveContainer width="100%" height={chartH(320)}>
             <BarChart data={seasonalRows} margin={{ top: 10, right: 10, left: 0, bottom: 5 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#2d3148" vertical={false} />
-              <XAxis dataKey="month" tick={{ fill: "#94a3b8", fontSize: 11 }} tickFormatter={fmtMonthShort} interval="preserveStartEnd" minTickGap={24} />
-              <YAxis tick={{ fill: "#6b7280", fontSize: 12 }} tickFormatter={v => `€${v}`} />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+              <XAxis dataKey="month" tick={{ fill: "var(--text-2)", fontSize: 11 }} tickFormatter={fmtMonthShort} interval="preserveStartEnd" minTickGap={24} />
+              <YAxis tick={{ fill: "var(--text-3)", fontSize: 12 }} tickFormatter={v => `€${v}`} />
               <Tooltip content={<RichTooltip unit="€" />} cursor={{ fill: "rgba(148,163,184,0.08)" }} />
               <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
               {types.map((t, i) => (
@@ -788,8 +793,8 @@ export default function AnalyticsTab({ source, reloadKey }: AnalyticsTabProps = 
         <ChartCard title="Seasonal Radar Profile" subtitle="Shape = energy use pattern across 4 seasons">
           <ResponsiveContainer width="100%" height={chartH(320)}>
             <RadarChart data={radarData} cx="50%" cy="45%" outerRadius={75}>
-              <PolarGrid stroke="#2d3148" />
-              <PolarAngleAxis dataKey="season" tick={{ fill: "#9ca3af", fontSize: 12 }} />
+              <PolarGrid stroke="var(--border)" />
+              <PolarAngleAxis dataKey="season" tick={{ fill: "var(--text-2)", fontSize: 12 }} />
               {radarTypes.map((t, i) => (
                 <Radar key={t} name={t} dataKey={t} stroke={colorFor(t, i)} fill={colorFor(t, i)} fillOpacity={0.15} />
               ))}
@@ -807,9 +812,9 @@ export default function AnalyticsTab({ source, reloadKey }: AnalyticsTabProps = 
           <ChartCard title="Annual Spend by Category" subtitle="Compare total utility cost across years">
             <ResponsiveContainer width="100%" height={chartH(320)}>
               <BarChart data={annualRows} margin={{ top: 10, right: 10, left: 0, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#2d3148" vertical={false} />
-                <XAxis dataKey="year" tick={{ fill: "#6b7280", fontSize: 12 }} />
-                <YAxis tick={{ fill: "#6b7280", fontSize: 12 }} tickFormatter={v => `€${v}`} />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                <XAxis dataKey="year" tick={{ fill: "var(--text-3)", fontSize: 12 }} />
+                <YAxis tick={{ fill: "var(--text-3)", fontSize: 12 }} tickFormatter={v => `€${v}`} />
                 <Tooltip content={<RichTooltip unit="€" />} cursor={{ fill: "rgba(148,163,184,0.08)" }} />
                 <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
                 {types.map((t, i) => (
@@ -828,9 +833,9 @@ export default function AnalyticsTab({ source, reloadKey }: AnalyticsTabProps = 
           <ChartCard title="Top Providers by Total Spend" subtitle="Identify your most expensive suppliers">
             <ResponsiveContainer width="100%" height={chartH(220)}>
               <BarChart data={topProviders} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" stroke="#2d3148" horizontal={false} />
-                <XAxis type="number" tick={{ fill: "#6b7280", fontSize: 12 }} tickFormatter={v => `€${v}`} />
-                <YAxis type="category" dataKey="provider" tick={{ fill: "#9ca3af", fontSize: isMobile ? 10 : 12 }} width={isMobile ? 80 : 120} />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" horizontal={false} />
+                <XAxis type="number" tick={{ fill: "var(--text-3)", fontSize: 12 }} tickFormatter={v => `€${v}`} />
+                <YAxis type="category" dataKey="provider" tick={{ fill: "var(--text-2)", fontSize: isMobile ? 10 : 12 }} width={isMobile ? 80 : 120} />
                 <Tooltip content={<RichTooltip unit="€" />} cursor={{ fill: "rgba(148,163,184,0.08)" }} />
                 <Bar dataKey="total_eur" fill="#2563eb" name="Total Spend" radius={[0, 4, 4, 0]}>
                   {topProviders.map((_, i) => <Cell key={i} fill={PALETTE[i % PALETTE.length]} />)}
@@ -846,9 +851,9 @@ export default function AnalyticsTab({ source, reloadKey }: AnalyticsTabProps = 
       <ChartCard title="Each Utility Type Over Time" subtitle="A sudden spike = price change or leak">
         <ResponsiveContainer width="100%" height={chartH(340)}>
           <LineChart data={stackedRows} margin={{ top: 10, right: 10, left: 0, bottom: 5 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#2d3148" vertical={false} />
-            <XAxis dataKey="month" tick={{ fill: "#94a3b8", fontSize: 11 }} tickFormatter={fmtMonthShort} interval="preserveStartEnd" minTickGap={24} />
-            <YAxis tick={{ fill: "#94a3b8", fontSize: 11 }} tickFormatter={v => `€${v}`} />
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+            <XAxis dataKey="month" tick={{ fill: "var(--text-2)", fontSize: 11 }} tickFormatter={fmtMonthShort} interval="preserveStartEnd" minTickGap={24} />
+            <YAxis tick={{ fill: "var(--text-2)", fontSize: 11 }} tickFormatter={v => `€${v}`} />
             <Tooltip content={<RichTooltip />} />
             <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
             {types.map((t, i) => (
@@ -860,13 +865,13 @@ export default function AnalyticsTab({ source, reloadKey }: AnalyticsTabProps = 
 
       {/* 8. Summary stats table */}
       <SectionTitle>🔢 8. Summary Statistics by Type</SectionTitle>
-      <div style={{ background: "#1a1d27", border: "1px solid #2d3148", borderRadius: 12, overflow: "hidden" }}>
+      <div style={{ background: "var(--surface-1)", border: "1px solid #2d3148", borderRadius: 12, overflow: "hidden" }}>
         <div style={{ overflowX: "auto" }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14, minWidth: 520 }}>
           <thead>
             <tr style={{ borderBottom: "1px solid #2d3148" }}>
               {["Type", "Bills", "Total", "Avg/Month", "Min", "Max", "Consumption"].map(h => (
-                <th key={h} style={{ padding: "12px 16px", textAlign: "left", color: "#6b7280", fontWeight: 600, fontSize: 12, textTransform: "uppercase" }}>{h}</th>
+                <th key={h} style={{ padding: "12px 16px", textAlign: "left", color: "var(--text-3)", fontWeight: 600, fontSize: 12, textTransform: "uppercase" }}>{h}</th>
               ))}
             </tr>
           </thead>
@@ -876,15 +881,15 @@ export default function AnalyticsTab({ source, reloadKey }: AnalyticsTabProps = 
                 <td style={{ padding: "12px 16px" }}>
                   <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     <span style={{ width: 8, height: 8, borderRadius: "50%", background: colorFor(row.utility_type, i), display: "inline-block" }} />
-                    <span style={{ color: "white" }}>{labelFor(row.utility_type)}</span>
+                    <span style={{ color: "var(--text-1)" }}>{labelFor(row.utility_type)}</span>
                   </span>
                 </td>
-                <td style={{ padding: "12px 16px", color: "#9ca3af" }}>{row.bill_count}</td>
-                <td style={{ padding: "12px 16px", color: "#22c55e", fontWeight: 600 }}>€{row.total_eur.toFixed(2)}</td>
-                <td style={{ padding: "12px 16px", color: "#e5e7eb" }}>€{row.avg_eur.toFixed(2)}</td>
-                <td style={{ padding: "12px 16px", color: "#9ca3af" }}>€{row.min_eur.toFixed(2)}</td>
-                <td style={{ padding: "12px 16px", color: "#9ca3af" }}>€{row.max_eur.toFixed(2)}</td>
-                <td style={{ padding: "12px 16px", color: "#9ca3af" }}>
+                <td style={{ padding: "12px 16px", color: "var(--text-2)" }}>{row.bill_count}</td>
+                <td style={{ padding: "12px 16px", color: "var(--success)", fontWeight: 600 }}>€{row.total_eur.toFixed(2)}</td>
+                <td style={{ padding: "12px 16px", color: "var(--text-1)" }}>€{row.avg_eur.toFixed(2)}</td>
+                <td style={{ padding: "12px 16px", color: "var(--text-2)" }}>€{row.min_eur.toFixed(2)}</td>
+                <td style={{ padding: "12px 16px", color: "var(--text-2)" }}>€{row.max_eur.toFixed(2)}</td>
+                <td style={{ padding: "12px 16px", color: "var(--text-2)" }}>
                   {row.total_kwh ? `${row.total_kwh.toFixed(0)} kWh` : row.total_m3 ? `${row.total_m3.toFixed(1)} m³` : "—"}
                 </td>
               </tr>
@@ -904,9 +909,9 @@ export default function AnalyticsTab({ source, reloadKey }: AnalyticsTabProps = 
           >
             <ResponsiveContainer width="100%" height={chartH(340)}>
               <LineChart data={unitPriceRows} margin={{ top: 10, right: 20, left: 0, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#2d3148" vertical={false} />
-                <XAxis dataKey="month" tick={{ fill: "#94a3b8", fontSize: 11 }} tickFormatter={fmtMonthShort} interval="preserveStartEnd" minTickGap={24} />
-                <YAxis tick={{ fill: "#94a3b8", fontSize: 11 }} tickFormatter={v => `€${Number(v).toFixed(2)}`} />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                <XAxis dataKey="month" tick={{ fill: "var(--text-2)", fontSize: 11 }} tickFormatter={fmtMonthShort} interval="preserveStartEnd" minTickGap={24} />
+                <YAxis tick={{ fill: "var(--text-2)", fontSize: 11 }} tickFormatter={v => `€${Number(v).toFixed(2)}`} />
                 <Tooltip content={<RichTooltip unit="€" showTotal={false} maxItems={8} />} />
                 <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} iconSize={10} />
                 {priceVaryingLabels.map((label, i) => (
@@ -930,9 +935,9 @@ export default function AnalyticsTab({ source, reloadKey }: AnalyticsTabProps = 
             <div style={{ overflowX: "auto" }}>
               <ResponsiveContainer width={Math.max(600, liStackData.length * 90)} height={360}>
                 <BarChart data={liStackData} margin={{ top: 10, right: 20, left: 0, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#2d3148" vertical={false} />
-                  <XAxis dataKey="month" tick={{ fill: "#94a3b8", fontSize: 11 }} tickFormatter={fmtMonthShort} interval="preserveStartEnd" minTickGap={24} />
-                  <YAxis tick={{ fill: "#94a3b8", fontSize: 11 }} tickFormatter={v => `€${v}`} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                  <XAxis dataKey="month" tick={{ fill: "var(--text-2)", fontSize: 11 }} tickFormatter={fmtMonthShort} interval="preserveStartEnd" minTickGap={24} />
+                  <YAxis tick={{ fill: "var(--text-2)", fontSize: 11 }} tickFormatter={v => `€${v}`} />
                   <Tooltip content={<RichTooltip unit="€" showTotal maxItems={6} />} cursor={{ fill: "rgba(148,163,184,0.08)" }} />
                   <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} iconSize={10} />
                   {liStackLabels.map((label, i) => (
@@ -958,20 +963,20 @@ export default function AnalyticsTab({ source, reloadKey }: AnalyticsTabProps = 
             <div style={{ overflowX: "auto" }}>
               <ResponsiveContainer width={Math.max(600, decompRows.length * 100)} height={360}>
                 <BarChart data={decompRows} margin={{ top: 10, right: 20, left: 0, bottom: 80 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#2d3148" vertical={false} />
-                  <XAxis dataKey="xLabel" tick={{ fill: "#94a3b8", fontSize: 10 }} interval={0} angle={-35} textAnchor="end" height={100} />
-                  <YAxis tick={{ fill: "#94a3b8", fontSize: 11 }} tickFormatter={v => `€${v}`} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                  <XAxis dataKey="xLabel" tick={{ fill: "var(--text-2)", fontSize: 10 }} interval={0} angle={-35} textAnchor="end" height={100} />
+                  <YAxis tick={{ fill: "var(--text-2)", fontSize: 11 }} tickFormatter={v => `€${v}`} />
                   <Tooltip content={<RichTooltip unit="€" showTotal={false} maxItems={4} />} cursor={{ fill: "rgba(148,163,184,0.08)" }} />
                   <Legend />
-                  <Bar dataKey="priceEffect" name="Price effect (€)" fill="#ef4444" radius={[3, 3, 0, 0]} />
+                  <Bar dataKey="priceEffect" name="Price effect (€)" fill="var(--danger)" radius={[3, 3, 0, 0]} />
                   <Bar dataKey="volEffect" name="Volume effect (€)" fill="#2563eb" radius={[3, 3, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
           </ChartCard>
 
-          <div style={{ background: "#1a1d27", border: "1px solid #2d3148", borderRadius: 12, overflow: "hidden", marginTop: 20 }}>
-            <div style={{ padding: "14px 20px", borderBottom: "1px solid #2d3148", fontSize: 14, fontWeight: 600, color: "#e5e7eb" }}>
+          <div style={{ background: "var(--surface-1)", border: "1px solid #2d3148", borderRadius: 12, overflow: "hidden", marginTop: 20 }}>
+            <div style={{ padding: "14px 20px", borderBottom: "1px solid #2d3148", fontSize: 14, fontWeight: 600, color: "var(--text-1)" }}>
               Decomposition Table — All Months
             </div>
             <div style={{ overflowX: "auto" }}>
@@ -979,7 +984,7 @@ export default function AnalyticsTab({ source, reloadKey }: AnalyticsTabProps = 
                 <thead>
                   <tr style={{ borderBottom: "1px solid #2d3148" }}>
                     {["Line Item", "Month", "Price Effect", "Volume Effect", "Total Change", "Interpretation"].map(h => (
-                      <th key={h} style={{ padding: "10px 16px", textAlign: "left", color: "#6b7280", fontWeight: 600, fontSize: 11, textTransform: "uppercase", whiteSpace: "nowrap" }}>{h}</th>
+                      <th key={h} style={{ padding: "10px 16px", textAlign: "left", color: "var(--text-3)", fontWeight: 600, fontSize: 11, textTransform: "uppercase", whiteSpace: "nowrap" }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -997,18 +1002,18 @@ export default function AnalyticsTab({ source, reloadKey }: AnalyticsTabProps = 
                       "Mixed";
                     return (
                       <tr key={i} style={{ borderBottom: "1px solid #1e2132" }}>
-                        <td style={{ padding: "10px 16px", color: "#e5e7eb", maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.label}</td>
-                        <td style={{ padding: "10px 16px", color: "#9ca3af" }}>{r.month}</td>
-                        <td style={{ padding: "10px 16px", color: r.priceEffect > 0 ? "#ef4444" : r.priceEffect < 0 ? "#22c55e" : "#6b7280", fontVariantNumeric: "tabular-nums" }}>
+                        <td style={{ padding: "10px 16px", color: "var(--text-1)", maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.label}</td>
+                        <td style={{ padding: "10px 16px", color: "var(--text-2)" }}>{r.month}</td>
+                        <td style={{ padding: "10px 16px", color: r.priceEffect > 0 ? "var(--danger)" : r.priceEffect < 0 ? "var(--success)" : "var(--text-3)", fontVariantNumeric: "tabular-nums" }}>
                           {r.priceEffect > 0 ? "+" : ""}€{r.priceEffect.toFixed(2)}
                         </td>
-                        <td style={{ padding: "10px 16px", color: r.volEffect > 0 ? "#f59e0b" : r.volEffect < 0 ? "#22c55e" : "#6b7280", fontVariantNumeric: "tabular-nums" }}>
+                        <td style={{ padding: "10px 16px", color: r.volEffect > 0 ? "#f59e0b" : r.volEffect < 0 ? "var(--success)" : "var(--text-3)", fontVariantNumeric: "tabular-nums" }}>
                           {r.volEffect > 0 ? "+" : ""}€{r.volEffect.toFixed(2)}
                         </td>
-                        <td style={{ padding: "10px 16px", color: r.total > 0 ? "#ef4444" : r.total < 0 ? "#22c55e" : "#6b7280", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
+                        <td style={{ padding: "10px 16px", color: r.total > 0 ? "var(--danger)" : r.total < 0 ? "var(--success)" : "var(--text-3)", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
                           {r.total > 0 ? "+" : ""}€{r.total.toFixed(2)}
                         </td>
-                        <td style={{ padding: "10px 16px", color: "#9ca3af", fontSize: 12 }}>{interpretation}</td>
+                        <td style={{ padding: "10px 16px", color: "var(--text-2)", fontSize: 12 }}>{interpretation}</td>
                       </tr>
                     );
                   })}
@@ -1023,34 +1028,34 @@ export default function AnalyticsTab({ source, reloadKey }: AnalyticsTabProps = 
       {comparisonItems.length > 0 && prevMonthLabel && latestMonthLabel && (
         <>
           <SectionTitle>📋 12. Line-Item Comparison: {prevMonthLabel} vs {latestMonthLabel}</SectionTitle>
-          <div style={{ background: "#1a1d27", border: "1px solid #2d3148", borderRadius: 12, overflow: "hidden" }}>
+          <div style={{ background: "var(--surface-1)", border: "1px solid #2d3148", borderRadius: 12, overflow: "hidden" }}>
             <div style={{ overflowX: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                 <thead>
                   <tr style={{ borderBottom: "1px solid #2d3148" }}>
                     {["Line Item", `${prevMonthLabel} (€)`, `${latestMonthLabel} (€)`, "Change (€)", "Unit price change", "Qty change"].map(h => (
-                      <th key={h} style={{ padding: "10px 16px", textAlign: "left", color: "#6b7280", fontWeight: 600, fontSize: 11, textTransform: "uppercase", whiteSpace: "nowrap" }}>{h}</th>
+                      <th key={h} style={{ padding: "10px 16px", textAlign: "left", color: "var(--text-3)", fontWeight: 600, fontSize: 11, textTransform: "uppercase", whiteSpace: "nowrap" }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {comparisonItems.map((row, i) => (
                     <tr key={i} style={{ borderBottom: i < comparisonItems.length - 1 ? "1px solid #1e2132" : "none", background: Math.abs(row.amtDiff) > 10 ? "rgba(239,68,68,0.04)" : "transparent" }}>
-                      <td style={{ padding: "10px 16px", color: "#e5e7eb", maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{row.label}</td>
-                      <td style={{ padding: "10px 16px", color: "#9ca3af", fontVariantNumeric: "tabular-nums" }}>
+                      <td style={{ padding: "10px 16px", color: "var(--text-1)", maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{row.label}</td>
+                      <td style={{ padding: "10px 16px", color: "var(--text-2)", fontVariantNumeric: "tabular-nums" }}>
                         {row.prev ? `€${row.prev.amount_eur.toFixed(2)}` : "—"}
                       </td>
-                      <td style={{ padding: "10px 16px", color: "#e5e7eb", fontVariantNumeric: "tabular-nums" }}>
+                      <td style={{ padding: "10px 16px", color: "var(--text-1)", fontVariantNumeric: "tabular-nums" }}>
                         {row.curr ? `€${row.curr.amount_eur.toFixed(2)}` : "—"}
                       </td>
-                      <td style={{ padding: "10px 16px", fontWeight: 600, fontVariantNumeric: "tabular-nums", color: row.amtDiff > 0.5 ? "#ef4444" : row.amtDiff < -0.5 ? "#22c55e" : "#6b7280" }}>
+                      <td style={{ padding: "10px 16px", fontWeight: 600, fontVariantNumeric: "tabular-nums", color: row.amtDiff > 0.5 ? "var(--danger)" : row.amtDiff < -0.5 ? "var(--success)" : "var(--text-3)" }}>
                         {!row.prev || !row.curr ? "—" : `${row.amtDiff > 0 ? "+" : ""}€${row.amtDiff.toFixed(2)}`}
                       </td>
-                      <td style={{ padding: "10px 16px", fontVariantNumeric: "tabular-nums", fontSize: 12, color: row.priceDiff == null ? "#4b5563" : row.priceDiff > 0.001 ? "#ef4444" : row.priceDiff < -0.001 ? "#22c55e" : "#6b7280" }}>
+                      <td style={{ padding: "10px 16px", fontVariantNumeric: "tabular-nums", fontSize: 12, color: row.priceDiff == null ? "var(--text-3)" : row.priceDiff > 0.001 ? "var(--danger)" : row.priceDiff < -0.001 ? "var(--success)" : "var(--text-3)" }}>
                         {row.priceDiff == null ? "—" :
                           `${row.priceDiff > 0 ? "+" : ""}€${row.priceDiff.toFixed(4)}/unit`}
                       </td>
-                      <td style={{ padding: "10px 16px", fontVariantNumeric: "tabular-nums", fontSize: 12, color: "#9ca3af" }}>
+                      <td style={{ padding: "10px 16px", fontVariantNumeric: "tabular-nums", fontSize: 12, color: "var(--text-2)" }}>
                         {row.prev?.quantity != null && row.curr?.quantity != null
                           ? `${row.prev.quantity} → ${row.curr.quantity} ${row.curr.unit || ""}`
                           : "—"}

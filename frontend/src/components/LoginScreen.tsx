@@ -4,6 +4,7 @@ import axios from "axios";
 import { api } from "../api";
 import { setToken } from "../auth";
 import { getGoogleClientId, loadGoogleIdentityServices } from "../google";
+import { useTheme } from "../theme";
 
 interface Props {
   onSuccess: () => void;
@@ -15,6 +16,7 @@ export default function LoginScreen({ onSuccess }: Props) {
   const [exchanging, setExchanging] = useState(false);
   const [ready, setReady] = useState(false);
   const clientId = getGoogleClientId();
+  const { resolved } = useTheme();
   // Derived from a stable env value, so it doesn't belong in a state update.
   const configError = !clientId
     ? "Google sign-in is not configured. Set VITE_GOOGLE_CLIENT_ID on the frontend and GOOGLE_CLIENT_ID on the backend."
@@ -50,12 +52,14 @@ export default function LoginScreen({ onSuccess }: Props) {
           auto_select: false,
           cancel_on_tap_outside: true,
         });
+        // The Google button itself doesn't honor our theme tokens, so we ask
+        // for the closest match and let it sit on a neutral surface.
         window.google.accounts.id.renderButton(buttonRef.current, {
-          theme: "filled_blue",
+          theme: resolved === "dark" ? "filled_black" : "outline",
           size: "large",
           text: "signin_with",
           shape: "pill",
-          width: 280,
+          width: 300,
         });
         setReady(true);
       })
@@ -65,78 +69,84 @@ export default function LoginScreen({ onSuccess }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [clientId, onSuccess]);
+  }, [clientId, onSuccess, resolved]);
 
   return (
     <div
       style={{
         minHeight: "100vh",
-        background: "#0f1117",
-        color: "#e5e7eb",
+        background:
+          "radial-gradient(1200px 600px at 80% -10%, var(--accent-soft), transparent 60%)," +
+          "radial-gradient(800px 500px at -10% 110%, var(--info-soft), transparent 60%)," +
+          "var(--bg)",
+        color: "var(--text-1)",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        fontFamily: "system-ui, sans-serif",
         padding: 24,
       }}
     >
       <div
+        className="slide-up"
         style={{
-          background: "#1a1d27",
-          border: "1px solid #2d3148",
-          borderRadius: 12,
-          padding: 32,
+          background: "var(--surface-1)",
+          border: "1px solid var(--border)",
+          borderRadius: 16,
+          padding: 36,
           width: "100%",
-          maxWidth: 420,
+          maxWidth: 440,
           display: "flex",
           flexDirection: "column",
-          gap: 20,
+          gap: 22,
           alignItems: "center",
+          boxShadow: "var(--shadow-lg)",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
           <div
+            className="pulse-accent"
             style={{
-              width: 44,
-              height: 44,
-              background: "#2563eb",
-              borderRadius: 10,
+              width: 48,
+              height: 48,
+              background: "linear-gradient(135deg, var(--accent), var(--accent-strong))",
+              borderRadius: 12,
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
+              boxShadow: "var(--shadow-accent)",
             }}
           >
-            <Receipt size={22} color="white" />
+            <Receipt size={22} color="var(--text-on-accent)" />
           </div>
           <div>
-            <div style={{ fontSize: 18, fontWeight: 700, color: "white" }}>
+            <div style={{ fontSize: 20, fontWeight: 700, color: "var(--text-1)", letterSpacing: -0.2 }}>
               EE Utility Tracker
             </div>
-            <div style={{ fontSize: 12, color: "#9ca3af" }}>
+            <div style={{ fontSize: 12, color: "var(--text-3)" }}>
               Sign in to upload and explore bills
             </div>
           </div>
         </div>
 
-        <p style={{ color: "#9ca3af", fontSize: 13, textAlign: "center", margin: 0 }}>
-          Use your Google account. Your bills will be visible to other signed-in users
-          unless you mark a bill private.
+        <p style={{ color: "var(--text-2)", fontSize: 13, textAlign: "center", margin: 0, lineHeight: 1.55 }}>
+          Use your Google account. Bills are visible to other signed-in users by
+          default; mark any bill private with the lock toggle to keep it to yourself.
         </p>
 
         <div
           ref={buttonRef}
-          style={{ minHeight: 44, display: "flex", justifyContent: "center" }}
+          style={{ minHeight: 48, display: "flex", justifyContent: "center" }}
         />
 
         {!ready && !error && (
-          <div style={{ color: "#9ca3af", fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{ color: "var(--text-2)", fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>
             <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} />
             Loading sign-in…
           </div>
         )}
 
         {exchanging && (
-          <div style={{ color: "#93c5fd", fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{ color: "var(--accent)", fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>
             <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} />
             Signing you in…
           </div>
@@ -144,12 +154,13 @@ export default function LoginScreen({ onSuccess }: Props) {
 
         {error && (
           <div
+            className="fade-in"
             style={{
               padding: "10px 14px",
-              borderRadius: 8,
-              background: "#3a1111",
-              border: "1px solid #7f1d1d",
-              color: "#fca5a5",
+              borderRadius: 10,
+              background: "var(--danger-soft)",
+              border: "1px solid var(--danger)",
+              color: "var(--danger)",
               fontSize: 13,
               display: "flex",
               alignItems: "flex-start",
@@ -161,8 +172,6 @@ export default function LoginScreen({ onSuccess }: Props) {
             <span>{error}</span>
           </div>
         )}
-
-        <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
       </div>
     </div>
   );

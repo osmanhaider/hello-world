@@ -6,17 +6,23 @@ import HelpTab from "./components/HelpTab";
 import CommunityTab from "./components/CommunityTab";
 import LoginScreen from "./components/LoginScreen";
 import ErrorBoundary from "./components/ErrorBoundary";
+import ThemeToggle from "./components/ThemeToggle";
 import {
   BarChart2, Receipt, Upload, HelpCircle, LogOut, Users as UsersIcon,
 } from "lucide-react";
 import { api, type User } from "./api";
 import { clearToken, getToken } from "./auth";
 import { useIsMobile } from "./hooks/useIsMobile";
+import { useTheme } from "./theme";
 
 type Tab = "upload" | "bills" | "analytics" | "community" | "help";
 type AuthState = "loading" | "required" | "authed";
 
 export default function App() {
+  // Drives the document `data-theme` attribute so the whole app retheme
+  // happens via CSS vars in styles/theme.css.
+  useTheme();
+
   const [tab, setTab] = useState<Tab>("upload");
   const [refreshKey, setRefreshKey] = useState(0);
   // Lazy initial: skip the loading state entirely if there's no token to verify.
@@ -33,7 +39,6 @@ export default function App() {
   useEffect(() => {
     let cancelled = false;
     if (!getToken()) {
-      // No token means we already initialised to "required" above; nothing to do.
       return;
     }
     api
@@ -78,12 +83,11 @@ export default function App() {
       <div
         style={{
           minHeight: "100vh",
-          background: "#0f1117",
-          color: "#9ca3af",
+          background: "var(--bg)",
+          color: "var(--text-2)",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          fontFamily: "system-ui, sans-serif",
         }}
       >
         Loading…
@@ -96,59 +100,106 @@ export default function App() {
   }
 
   return (
-    <div style={{ minHeight: "100vh", background: "#0f1117", color: "#e5e7eb", fontFamily: "system-ui, sans-serif" }}>
-      <header style={{
-        background: "#1a1d27", borderBottom: "1px solid #2d3148",
-        padding: isMobile ? "12px 16px" : "16px 24px",
-        display: "flex", alignItems: "center", gap: isMobile ? 8 : 16,
-      }}>
+    <div style={{ minHeight: "100vh", background: "var(--bg)", color: "var(--text-1)" }}>
+      <header
+        style={{
+          position: "sticky",
+          top: 0,
+          zIndex: 20,
+          background: "color-mix(in oklab, var(--bg-elev) 88%, transparent)",
+          backdropFilter: "saturate(140%) blur(10px)",
+          WebkitBackdropFilter: "saturate(140%) blur(10px)",
+          borderBottom: "1px solid var(--border)",
+          padding: isMobile ? "10px 14px" : "14px 24px",
+          display: "flex",
+          alignItems: "center",
+          gap: isMobile ? 8 : 16,
+        }}
+      >
         <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 8 : 12 }}>
-          <div style={{ width: 32, height: 32, background: "#2563eb", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-            <Receipt size={16} color="white" />
+          <div
+            style={{
+              width: 34,
+              height: 34,
+              background: "linear-gradient(135deg, var(--accent), var(--accent-strong))",
+              borderRadius: 10,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              flexShrink: 0,
+              boxShadow: "var(--shadow-accent)",
+            }}
+          >
+            <Receipt size={17} color="var(--text-on-accent)" />
           </div>
           {!isMobile && (
             <div>
-              <div style={{ fontSize: 16, fontWeight: 700, color: "white" }}>EE Utility Tracker</div>
-              <div style={{ fontSize: 12, color: "#9ca3af" }}>Estonia Monthly Bill Analytics</div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-1)", letterSpacing: -0.1 }}>
+                EE Utility Tracker
+              </div>
+              <div style={{ fontSize: 11, color: "var(--text-3)" }}>Estonia bill analytics</div>
             </div>
           )}
         </div>
-        <nav style={{ marginLeft: "auto", display: "flex", gap: isMobile ? 2 : 4, alignItems: "center" }}>
+
+        <nav
+          style={{
+            marginLeft: "auto",
+            display: "flex",
+            gap: isMobile ? 2 : 4,
+            alignItems: "center",
+          }}
+        >
           {([
             ["upload", "Upload", Upload],
             ["bills", "Bills", Receipt],
             ["analytics", "Analytics", BarChart2],
             ["community", "Community", UsersIcon],
             ["help", "Help", HelpCircle],
-          ] as [Tab, string, React.ElementType][]).map(([id, label, Icon]) => (
-            <button
-              key={id}
-              onClick={() => setTab(id)}
-              title={label}
-              style={{
-                display: "flex", alignItems: "center", gap: 6,
-                padding: isMobile ? "8px 10px" : "8px 14px",
-                borderRadius: 8, border: "none", cursor: "pointer",
-                fontSize: 13, fontWeight: 500,
-                background: tab === id ? "#2563eb" : "transparent",
-                color: tab === id ? "white" : "#9ca3af",
-                transition: "all 0.15s",
-              }}
-            >
-              <Icon size={16} />
-              {!isMobile && label}
-            </button>
-          ))}
+          ] as [Tab, string, React.ElementType][]).map(([id, label, Icon]) => {
+            const active = tab === id;
+            return (
+              <button
+                key={id}
+                onClick={() => setTab(id)}
+                title={label}
+                className="btn-press"
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  padding: isMobile ? "8px 10px" : "8px 14px",
+                  borderRadius: 8,
+                  border: "1px solid",
+                  borderColor: active ? "transparent" : "transparent",
+                  cursor: "pointer",
+                  fontSize: 13,
+                  fontWeight: 500,
+                  background: active ? "var(--accent-soft)" : "transparent",
+                  color: active ? "var(--accent)" : "var(--text-2)",
+                }}
+              >
+                <Icon size={16} />
+                {!isMobile && label}
+              </button>
+            );
+          })}
+
+          <span style={{ width: 8, display: "inline-block" }} />
+          <ThemeToggle compact={isMobile} />
+
           {me && (
             <div
               title={me.email ?? me.name ?? ""}
               style={{
-                display: "flex", alignItems: "center", gap: 8,
-                marginLeft: isMobile ? 4 : 12,
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                marginLeft: isMobile ? 4 : 8,
                 padding: isMobile ? "4px 6px" : "4px 10px 4px 4px",
                 borderRadius: 999,
-                border: "1px solid #2d3148",
-                background: "#0f1117",
+                border: "1px solid var(--border)",
+                background: "var(--surface-1)",
               }}
             >
               {me.picture ? (
@@ -163,17 +214,32 @@ export default function App() {
               ) : (
                 <div
                   style={{
-                    width: 26, height: 26, borderRadius: "50%",
-                    background: "#2563eb", color: "white",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    fontSize: 12, fontWeight: 600,
+                    width: 26,
+                    height: 26,
+                    borderRadius: "50%",
+                    background: "var(--accent)",
+                    color: "var(--text-on-accent)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: 12,
+                    fontWeight: 600,
                   }}
                 >
                   {(me.name ?? me.email ?? "?").slice(0, 1).toUpperCase()}
                 </div>
               )}
               {!isMobile && (
-                <span style={{ fontSize: 12, color: "#d1d5db", maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                <span
+                  style={{
+                    fontSize: 12,
+                    color: "var(--text-2)",
+                    maxWidth: 140,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
                   {me.name ?? me.email}
                 </span>
               )}
@@ -182,12 +248,19 @@ export default function App() {
           <button
             onClick={logout}
             title="Sign out"
+            className="btn-press"
             style={{
-              display: "flex", alignItems: "center", gap: 6,
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
               padding: isMobile ? "8px 10px" : "8px 12px",
-              borderRadius: 8, border: "1px solid #2d3148", cursor: "pointer",
-              fontSize: 13, background: "transparent", color: "#9ca3af",
-              marginLeft: isMobile ? 4 : 8,
+              borderRadius: 8,
+              border: "1px solid var(--border)",
+              cursor: "pointer",
+              fontSize: 13,
+              background: "var(--surface-1)",
+              color: "var(--text-2)",
+              marginLeft: isMobile ? 4 : 6,
             }}
           >
             <LogOut size={14} />
@@ -196,7 +269,15 @@ export default function App() {
         </nav>
       </header>
 
-      <main style={{ padding: isMobile ? "16px 12px" : "24px", maxWidth: 1280, margin: "0 auto" }}>
+      <main
+        key={tab}
+        className="tab-content"
+        style={{
+          padding: isMobile ? "16px 12px" : "28px 24px",
+          maxWidth: 1280,
+          margin: "0 auto",
+        }}
+      >
         <ErrorBoundary>
           {tab === "upload" && <UploadTab onSuccess={() => { refresh(); setTab("bills"); }} />}
           {tab === "bills" && <BillsTab onDataChange={refresh} />}

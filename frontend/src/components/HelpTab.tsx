@@ -1,27 +1,27 @@
 import { Upload, Receipt, BarChart2, FileText, RefreshCw, Download, ShieldCheck, Terminal } from "lucide-react";
 
-const cardStyle = {
-  background: "#1a1d27",
-  border: "1px solid #2d3148",
-  borderRadius: 12,
+const cardStyle: React.CSSProperties = {
+  background: "var(--surface-1)",
+  border: "1px solid var(--border)",
+  borderRadius: "var(--radius)",
   padding: 24,
 };
 
-const sectionTitleStyle = {
-  color: "white",
+const sectionTitleStyle: React.CSSProperties = {
+  color: "var(--text-1)",
   fontSize: 16,
   fontWeight: 600,
   margin: "32px 0 16px",
 };
 
-const subtleChip = {
+const subtleChip: React.CSSProperties = {
   display: "inline-block",
-  background: "#252838",
-  border: "1px solid #374151",
+  background: "var(--surface-2)",
+  border: "1px solid var(--border)",
   borderRadius: 6,
   padding: "3px 10px",
   fontSize: 12,
-  color: "#d1d5db",
+  color: "var(--text-1)",
   marginRight: 6,
   marginBottom: 6,
 };
@@ -135,28 +135,33 @@ const TIPS: [string, string][] = [
 export default function HelpTab() {
   return (
     <div style={{ maxWidth: 920, margin: "0 auto" }}>
-      <h2 style={{ color: "white", fontSize: 22, margin: "0 0 8px" }}>How to use this app</h2>
-      <p style={{ color: "#9ca3af", fontSize: 14, margin: "0 0 24px" }}>
+      <h2 style={{ color: "var(--text-1)", fontSize: 22, margin: "0 0 8px", letterSpacing: -0.2 }}>How to use this app</h2>
+      <p style={{ color: "var(--text-2)", fontSize: 14, margin: "0 0 24px" }}>
         Upload monthly utility bills, let the open-source parser extract every line item in
         Estonian, and explore spend patterns through 12 analytics sections. Everything runs
         locally — no API key required.
       </p>
 
       {/* Quickstart */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 16 }}>
-        {STEPS.map(({ icon: Icon, title, body }) => (
-          <div key={title} style={cardStyle}>
+      <div className="list-stagger" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 16 }}>
+        {STEPS.map(({ icon: Icon, title, body }, i) => (
+          <div
+            key={title}
+            className="lift"
+            style={{ ...cardStyle, ["--i" as string]: i } as React.CSSProperties}
+          >
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
               <div style={{
                 width: 32, height: 32, borderRadius: 8,
-                background: "#1e2640", border: "1px solid #2563eb",
+                background: "var(--accent-soft)", border: "1px solid var(--accent)",
                 display: "flex", alignItems: "center", justifyContent: "center",
+                color: "var(--accent)",
               }}>
-                <Icon size={16} color="#60a5fa" />
+                <Icon size={16} />
               </div>
-              <div style={{ color: "white", fontWeight: 600, fontSize: 14 }}>{title}</div>
+              <div style={{ color: "var(--text-1)", fontWeight: 600, fontSize: 14 }}>{title}</div>
             </div>
-            <div style={{ color: "#9ca3af", fontSize: 13, lineHeight: 1.55 }}>{body}</div>
+            <div style={{ color: "var(--text-2)", fontSize: 13, lineHeight: 1.55 }}>{body}</div>
           </div>
         ))}
       </div>
@@ -170,10 +175,10 @@ export default function HelpTab() {
             gridTemplateColumns: "180px 1fr",
             gap: 16,
             padding: "10px 0",
-            borderBottom: i < TIPS.length - 1 ? "1px solid #1e2132" : "none",
+            borderBottom: i < TIPS.length - 1 ? "1px solid var(--divider)" : "none",
           }}>
-            <div style={{ color: "#e5e7eb", fontWeight: 500, fontSize: 13 }}>{t}</div>
-            <div style={{ color: "#9ca3af", fontSize: 13, lineHeight: 1.5 }}>{d}</div>
+            <div style={{ color: "var(--text-1)", fontWeight: 500, fontSize: 13 }}>{t}</div>
+            <div style={{ color: "var(--text-2)", fontSize: 13, lineHeight: 1.5 }}>{d}</div>
           </div>
         ))}
       </div>
@@ -187,10 +192,10 @@ export default function HelpTab() {
             gridTemplateColumns: "180px 1fr",
             gap: 16,
             padding: "10px 0",
-            borderBottom: i < KPI_NOTES.length - 1 ? "1px solid #1e2132" : "none",
+            borderBottom: i < KPI_NOTES.length - 1 ? "1px solid var(--divider)" : "none",
           }}>
-            <div style={{ color: "#e5e7eb", fontWeight: 500, fontSize: 13 }}>{t}</div>
-            <div style={{ color: "#9ca3af", fontSize: 13, lineHeight: 1.5 }}>{d}</div>
+            <div style={{ color: "var(--text-1)", fontWeight: 500, fontSize: 13 }}>{t}</div>
+            <div style={{ color: "var(--text-2)", fontSize: 13, lineHeight: 1.5 }}>{d}</div>
           </div>
         ))}
       </div>
@@ -204,33 +209,33 @@ export default function HelpTab() {
             gridTemplateColumns: "220px 1fr",
             gap: 16,
             padding: "9px 0",
-            borderBottom: i < DASHBOARD_SECTIONS.length - 1 ? "1px solid #1e2132" : "none",
+            borderBottom: i < DASHBOARD_SECTIONS.length - 1 ? "1px solid var(--divider)" : "none",
           }}>
-            <div style={{ color: "#e5e7eb", fontWeight: 500, fontSize: 13 }}>{t}</div>
-            <div style={{ color: "#9ca3af", fontSize: 13, lineHeight: 1.5 }}>{d}</div>
+            <div style={{ color: "var(--text-1)", fontWeight: 500, fontSize: 13 }}>{t}</div>
+            <div style={{ color: "var(--text-2)", fontSize: 13, lineHeight: 1.5 }}>{d}</div>
           </div>
         ))}
       </div>
 
       {/* Glossary */}
       <div style={sectionTitleStyle}>📖 Estonian → English glossary</div>
-      <p style={{ color: "#6b7280", fontSize: 12, margin: "0 0 12px" }}>
+      <p style={{ color: "var(--text-3)", fontSize: 12, margin: "0 0 12px" }}>
         Most common terms used on Estonian utility bills. The backend dictionary covers 180+ terms
         and is applied automatically when you upload.
       </p>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 16 }}>
         {GLOSSARY_GROUPS.map(group => (
-          <div key={group.title} style={cardStyle}>
+          <div key={group.title} className="lift" style={cardStyle}>
             <div style={{
-              fontSize: 11, color: "#60a5fa", textTransform: "uppercase",
+              fontSize: 11, color: "var(--accent)", textTransform: "uppercase",
               letterSpacing: "0.05em", fontWeight: 600, marginBottom: 10,
             }}>{group.title}</div>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
               <tbody>
                 {group.rows.map(([et, en], i) => (
-                  <tr key={et} style={{ borderBottom: i < group.rows.length - 1 ? "1px solid #1e2132" : "none" }}>
-                    <td style={{ padding: "7px 0", color: "#9ca3af", width: "45%" }}>{et}</td>
-                    <td style={{ padding: "7px 0", color: "#e5e7eb" }}>{en}</td>
+                  <tr key={et} style={{ borderBottom: i < group.rows.length - 1 ? "1px solid var(--divider)" : "none" }}>
+                    <td style={{ padding: "7px 0", color: "var(--text-2)", width: "45%" }}>{et}</td>
+                    <td style={{ padding: "7px 0", color: "var(--text-1)" }}>{en}</td>
                   </tr>
                 ))}
               </tbody>
@@ -241,7 +246,7 @@ export default function HelpTab() {
 
       {/* Feature chips */}
       <div style={sectionTitleStyle}>✨ What this app does</div>
-      <div style={cardStyle}>
+      <div className="lift" style={cardStyle}>
         <div style={{ display: "flex", flexWrap: "wrap" }}>
           <span style={subtleChip}><FileText size={12} style={{ verticalAlign: -1, marginRight: 4 }} />OCR + native PDF parsing</span>
           <span style={subtleChip}>Local translation (180+ terms)</span>

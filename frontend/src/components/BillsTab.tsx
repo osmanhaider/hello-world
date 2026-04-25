@@ -136,36 +136,63 @@ export default function BillsTab({ onDataChange }: BillsTabProps = {}) {
   };
 
   const isMobile = useIsMobile();
-  const cardStyle = { background: "#1a1d27", borderRadius: 12, border: "1px solid #2d3148" };
-  const inputStyle = { background: "#252838", border: "1px solid #374151", borderRadius: 6, color: "#e5e7eb", padding: "6px 10px", fontSize: 13 };
+  const cardStyle = {
+    background: "var(--surface-1)",
+    borderRadius: "var(--radius)",
+    border: "1px solid var(--border)",
+  } as const;
+  const inputStyle = {
+    background: "var(--surface-2)",
+    border: "1px solid var(--border)",
+    borderRadius: 8,
+    color: "var(--text-1)",
+    padding: "7px 11px",
+    fontSize: 13,
+  } as const;
 
-  if (loading) return (
-    <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: 200, gap: 12, color: "#9ca3af" }}>
-      <Loader2 size={24} style={{ animation: "spin 1s linear infinite" }} /> Loading bills…
-      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
-    </div>
-  );
+  if (loading) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div key={i} className="skeleton" style={{ height: 64, borderRadius: 12 }} />
+        ))}
+      </div>
+    );
+  }
 
-  if (!bills.length) return (
-    <div style={{ textAlign: "center", padding: 80, color: "#6b7280" }}>
-      <AlertCircle size={40} style={{ marginBottom: 12 }} />
-      <p>No bills yet. Upload your first utility bill!</p>
-    </div>
-  );
+  if (!bills.length) {
+    return (
+      <div
+        className="fade-in"
+        style={{
+          textAlign: "center",
+          padding: "80px 24px",
+          color: "var(--text-3)",
+          background: "var(--surface-1)",
+          borderRadius: 14,
+          border: "1px dashed var(--border)",
+        }}
+      >
+        <AlertCircle size={36} style={{ marginBottom: 10, color: "var(--text-3)" }} />
+        <p style={{ margin: 0, fontSize: 14 }}>No bills yet. Upload your first utility bill!</p>
+      </div>
+    );
+  }
 
   return (
     <div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24, flexWrap: "wrap", gap: 12 }}>
         <div>
-          <h2 style={{ color: "white", margin: 0, fontSize: 22 }}>Bill History</h2>
-          <p style={{ color: "#9ca3af", margin: "4px 0 0", fontSize: 13 }}>
-            {filtered.length} bill{filtered.length !== 1 ? "s" : ""} · Total: <strong style={{ color: "#22c55e" }}>€{totalEur.toFixed(2)}</strong>
+          <h2 style={{ color: "var(--text-1)", margin: 0, fontSize: 22, letterSpacing: -0.2 }}>Bill History</h2>
+          <p style={{ color: "var(--text-2)", margin: "4px 0 0", fontSize: 13 }}>
+            {filtered.length} bill{filtered.length !== 1 ? "s" : ""} · Total: <strong style={{ color: "var(--success)" }}>€{totalEur.toFixed(2)}</strong>
           </p>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           <button
             onClick={toggleAllVisible}
             disabled={filtered.length === 0}
+            className="btn-press"
             style={{
               ...inputStyle,
               cursor: filtered.length === 0 ? "not-allowed" : "pointer",
@@ -189,22 +216,28 @@ export default function BillsTab({ onDataChange }: BillsTabProps = {}) {
 
       {selected.size > 0 && (
         <div
+          className="slide-up"
           style={{
-            position: "sticky", top: 0, zIndex: 5,
+            position: "sticky", top: 64, zIndex: 5,
             display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap",
-            background: "#1e2640", border: "1px solid #2563eb",
+            background: "var(--accent-soft)",
+            border: "1px solid var(--accent)",
             borderRadius: 12, padding: "10px 14px", marginBottom: 12,
+            backdropFilter: "blur(6px)",
+            WebkitBackdropFilter: "blur(6px)",
+            boxShadow: "var(--shadow-md)",
           }}
         >
-          <span style={{ color: "#dbeafe", fontSize: 13, fontWeight: 600 }}>
+          <span style={{ color: "var(--accent)", fontSize: 13, fontWeight: 600 }}>
             {selected.size} selected
           </span>
           <button
             onClick={clearSelection}
             disabled={bulkDeleting}
+            className="btn-press"
             style={{
-              background: "transparent", border: "1px solid #374151",
-              borderRadius: 6, color: "#d1d5db", padding: "5px 10px",
+              background: "transparent", border: "1px solid var(--border-strong)",
+              borderRadius: 6, color: "var(--text-1)", padding: "5px 10px",
               fontSize: 12, cursor: bulkDeleting ? "not-allowed" : "pointer",
             }}
           >
@@ -213,13 +246,15 @@ export default function BillsTab({ onDataChange }: BillsTabProps = {}) {
           <button
             onClick={bulkDelete}
             disabled={bulkDeleting}
+            className={bulkDeleting ? "" : "btn-press"}
             style={{
               marginLeft: "auto",
               display: "flex", alignItems: "center", gap: 6,
-              background: bulkDeleting ? "#7f1d1d" : "#dc2626",
-              border: "none", borderRadius: 6, color: "white",
-              padding: "6px 12px", fontSize: 13, fontWeight: 600,
+              background: bulkDeleting ? "var(--danger-strong)" : "var(--danger)",
+              border: "none", borderRadius: 8, color: "var(--text-on-accent)",
+              padding: "7px 14px", fontSize: 13, fontWeight: 600,
               cursor: bulkDeleting ? "not-allowed" : "pointer",
+              boxShadow: bulkDeleting ? "none" : "var(--shadow-sm)",
             }}
           >
             {bulkDeleting
@@ -230,8 +265,8 @@ export default function BillsTab({ onDataChange }: BillsTabProps = {}) {
         </div>
       )}
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {filtered.map(bill => {
+      <div className="list-stagger" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {filtered.map((bill, idx) => {
           const isOpen = expanded === bill.id;
           const color = TYPE_COLORS[bill.utility_type ?? "other"] ?? "#9ca3af";
           const raw = bill.raw_json ? JSON.parse(bill.raw_json) : {};
@@ -240,12 +275,14 @@ export default function BillsTab({ onDataChange }: BillsTabProps = {}) {
           return (
             <div
               key={bill.id}
+              className="lift"
               style={{
                 ...cardStyle,
                 overflow: "hidden",
-                outline: isSelected ? "2px solid #2563eb" : "none",
+                outline: isSelected ? "2px solid var(--accent)" : "none",
                 outlineOffset: -1,
-              }}
+                ["--i" as string]: Math.min(idx, 12),
+              } as React.CSSProperties}
             >
               <div
                 onClick={() => setExpanded(isOpen ? null : bill.id)}
@@ -256,7 +293,8 @@ export default function BillsTab({ onDataChange }: BillsTabProps = {}) {
                   title={isSelected ? "Unselect" : "Select"}
                   style={{
                     background: "transparent", border: "none", padding: 4,
-                    cursor: "pointer", color: isSelected ? "#2563eb" : "#6b7280",
+                    cursor: "pointer",
+                    color: isSelected ? "var(--accent)" : "var(--text-3)",
                     flexShrink: 0, display: "flex", alignItems: "center",
                   }}
                 >
@@ -267,46 +305,58 @@ export default function BillsTab({ onDataChange }: BillsTabProps = {}) {
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                    <span style={{ fontWeight: 600, color: "white", fontSize: isMobile ? 14 : 15 }}>{bill.provider ?? "Unknown Provider"}</span>
+                    <span style={{ fontWeight: 600, color: "var(--text-1)", fontSize: isMobile ? 14 : 15 }}>{bill.provider ?? "Unknown Provider"}</span>
                     {bill.utility_type && !isMobile && (
                       <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 20, background: `${color}22`, color, border: `1px solid ${color}44`, textTransform: "capitalize" }}>
                         {bill.utility_type}
                       </span>
                     )}
                   </div>
-                  <div style={{ fontSize: 12, color: "#9ca3af", marginTop: 2 }}>
+                  <div style={{ fontSize: 12, color: "var(--text-2)", marginTop: 2 }}>
                     {bill.bill_date ?? bill.upload_date?.slice(0, 10)}
                     {bill.period_start && bill.period_end && !isMobile && ` · ${bill.period_start} → ${bill.period_end}`}
                   </div>
                 </div>
                 <div style={{ textAlign: "right", flexShrink: 0 }}>
-                  <div style={{ fontWeight: 700, fontSize: isMobile ? 15 : 18, color: "#22c55e" }}>
+                  <div style={{ fontWeight: 700, fontSize: isMobile ? 15 : 18, color: "var(--success)" }}>
                     {bill.amount_eur != null ? `€${bill.amount_eur.toFixed(2)}` : "—"}
                   </div>
-                  {bill.consumption_kwh != null && !isMobile && <div style={{ fontSize: 12, color: "#9ca3af" }}>{bill.consumption_kwh} kWh</div>}
-                  {bill.consumption_m3 != null && !isMobile && <div style={{ fontSize: 12, color: "#9ca3af" }}>{bill.consumption_m3} m³</div>}
+                  {bill.consumption_kwh != null && !isMobile && <div style={{ fontSize: 12, color: "var(--text-2)" }}>{bill.consumption_kwh} kWh</div>}
+                  {bill.consumption_m3 != null && !isMobile && <div style={{ fontSize: 12, color: "var(--text-2)" }}>{bill.consumption_m3} m³</div>}
                 </div>
                 <button
                   onClick={e => togglePrivate(bill, e)}
                   title={bill.is_private ? "Private — only you can see this bill. Click to make it public." : "Public — visible to all signed-in users. Click to make it private."}
-                  style={{ background: "none", border: "none", cursor: "pointer", color: bill.is_private ? "#f59e0b" : "#22c55e", padding: 4, borderRadius: 4, flexShrink: 0 }}
+                  style={{
+                    background: "none", border: "none", cursor: "pointer",
+                    color: bill.is_private ? "var(--warning)" : "var(--success)",
+                    padding: 4, borderRadius: 4, flexShrink: 0,
+                  }}
                 >
                   {bill.is_private ? <Lock size={15} /> : <Globe size={15} />}
                 </button>
-                <button onClick={e => deleteBill(bill.id, e)} style={{ background: "none", border: "none", cursor: "pointer", color: "#6b7280", padding: 4, borderRadius: 4, flexShrink: 0 }}>
+                <button
+                  onClick={e => deleteBill(bill.id, e)}
+                  style={{
+                    background: "none", border: "none", cursor: "pointer",
+                    color: "var(--text-3)", padding: 4, borderRadius: 4, flexShrink: 0,
+                  }}
+                >
                   <Trash2 size={15} />
                 </button>
-                {isOpen ? <ChevronUp size={15} color="#6b7280" style={{ flexShrink: 0 }} /> : <ChevronDown size={15} color="#6b7280" style={{ flexShrink: 0 }} />}
+                {isOpen
+                  ? <ChevronUp size={15} style={{ flexShrink: 0, color: "var(--text-3)" }} />
+                  : <ChevronDown size={15} style={{ flexShrink: 0, color: "var(--text-3)" }} />}
               </div>
 
               {isOpen && (
-                <div style={{ borderTop: "1px solid #2d3148", padding: "16px 20px" }}>
+                <div className="fade-in" style={{ borderTop: "1px solid var(--divider)", padding: "16px 20px" }}>
                   {raw.translated_summary && (
-                    <div style={{ marginBottom: 16, padding: "12px 14px", background: "#1e2640", borderLeft: "3px solid #2563eb", borderRadius: 6 }}>
-                      <div style={{ fontSize: 11, color: "#2563eb", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4, fontWeight: 600 }}>
+                    <div style={{ marginBottom: 16, padding: "12px 14px", background: "var(--accent-soft)", borderLeft: "3px solid var(--accent)", borderRadius: 6 }}>
+                      <div style={{ fontSize: 11, color: "var(--accent)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4, fontWeight: 600 }}>
                         🌍 English Summary
                       </div>
-                      <div style={{ fontSize: 13, color: "#e5e7eb", lineHeight: 1.5 }}>{raw.translated_summary}</div>
+                      <div style={{ fontSize: 13, color: "var(--text-1)", lineHeight: 1.5 }}>{raw.translated_summary}</div>
                     </div>
                   )}
 
@@ -325,32 +375,32 @@ export default function BillsTab({ onDataChange }: BillsTabProps = {}) {
                       ["Confidence", raw.confidence],
                     ].map(([label, val]) => val ? (
                       <div key={label as string}>
-                        <div style={{ fontSize: 11, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>{label}</div>
-                        <div style={{ fontSize: 13, color: "#d1d5db", marginTop: 2, wordBreak: "break-all" }}>{val as string}</div>
+                        <div style={{ fontSize: 11, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.05em" }}>{label}</div>
+                        <div style={{ fontSize: 13, color: "var(--text-1)", marginTop: 2, wordBreak: "break-all" }}>{val as string}</div>
                       </div>
                     ) : null)}
                   </div>
 
                   {Array.isArray(raw.line_items) && raw.line_items.length > 0 && (
                     <div style={{ marginTop: 16 }}>
-                      <div style={{ fontSize: 11, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8, fontWeight: 600 }}>
+                      <div style={{ fontSize: 11, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8, fontWeight: 600 }}>
                         Line Items (Estonian → English)
                       </div>
                       <div style={{ overflowX: "auto" }}>
                       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 360 }}>
                         <thead>
-                          <tr style={{ borderBottom: "1px solid #2d3148" }}>
-                            <th style={{ padding: "6px 0", textAlign: "left", color: "#6b7280", fontSize: 11, fontWeight: 600 }}>ESTONIAN</th>
-                            <th style={{ padding: "6px 0", textAlign: "left", color: "#6b7280", fontSize: 11, fontWeight: 600 }}>ENGLISH</th>
-                            <th style={{ padding: "6px 0", textAlign: "right", color: "#6b7280", fontSize: 11, fontWeight: 600 }}>AMOUNT</th>
+                          <tr style={{ borderBottom: "1px solid var(--border)" }}>
+                            <th style={{ padding: "6px 0", textAlign: "left", color: "var(--text-3)", fontSize: 11, fontWeight: 600 }}>ESTONIAN</th>
+                            <th style={{ padding: "6px 0", textAlign: "left", color: "var(--text-3)", fontSize: 11, fontWeight: 600 }}>ENGLISH</th>
+                            <th style={{ padding: "6px 0", textAlign: "right", color: "var(--text-3)", fontSize: 11, fontWeight: 600 }}>AMOUNT</th>
                           </tr>
                         </thead>
                         <tbody>
                           {(raw.line_items as Array<Record<string, unknown>>).map((li, i) => (
-                            <tr key={i} style={{ borderBottom: "1px solid #1e2132" }}>
-                              <td style={{ padding: "6px 8px 6px 0", color: "#9ca3af" }}>{String(li.description_et ?? "—")}</td>
-                              <td style={{ padding: "6px 0", color: "#e5e7eb" }}>{String(li.description_en ?? "—")}</td>
-                              <td style={{ padding: "6px 0", textAlign: "right", color: "#22c55e", fontVariantNumeric: "tabular-nums" }}>
+                            <tr key={i} style={{ borderBottom: "1px solid var(--divider)" }}>
+                              <td style={{ padding: "6px 8px 6px 0", color: "var(--text-2)" }}>{String(li.description_et ?? "—")}</td>
+                              <td style={{ padding: "6px 0", color: "var(--text-1)" }}>{String(li.description_en ?? "—")}</td>
+                              <td style={{ padding: "6px 0", textAlign: "right", color: "var(--success)", fontVariantNumeric: "tabular-nums" }}>
                                 {li.amount_eur != null ? `€${(li.amount_eur as number).toFixed(2)}` : "—"}
                               </td>
                             </tr>
@@ -363,15 +413,15 @@ export default function BillsTab({ onDataChange }: BillsTabProps = {}) {
 
                   {raw.glossary && typeof raw.glossary === "object" && Object.keys(raw.glossary).length > 0 && (
                     <div style={{ marginTop: 16 }}>
-                      <div style={{ fontSize: 11, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8, fontWeight: 600 }}>
+                      <div style={{ fontSize: 11, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8, fontWeight: 600 }}>
                         📖 Glossary
                       </div>
                       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 6 }}>
                         {Object.entries(raw.glossary as Record<string, string>).map(([et, en]) => (
-                          <div key={et} style={{ background: "#252838", padding: "6px 10px", borderRadius: 6, fontSize: 12 }}>
-                            <span style={{ color: "#9ca3af" }}>{et}</span>
-                            <span style={{ color: "#6b7280", margin: "0 6px" }}>→</span>
-                            <span style={{ color: "#e5e7eb" }}>{en}</span>
+                          <div key={et} style={{ background: "var(--surface-2)", padding: "6px 10px", borderRadius: 6, fontSize: 12 }}>
+                            <span style={{ color: "var(--text-2)" }}>{et}</span>
+                            <span style={{ color: "var(--text-3)", margin: "0 6px" }}>→</span>
+                            <span style={{ color: "var(--text-1)" }}>{en}</span>
                           </div>
                         ))}
                       </div>
@@ -379,7 +429,7 @@ export default function BillsTab({ onDataChange }: BillsTabProps = {}) {
                   )}
 
                   {bill.notes && (
-                    <div style={{ marginTop: 12, padding: "10px 14px", background: "#252838", borderRadius: 6, fontSize: 13, color: "#9ca3af" }}>
+                    <div style={{ marginTop: 12, padding: "10px 14px", background: "var(--surface-2)", borderRadius: 6, fontSize: 13, color: "var(--text-2)" }}>
                       {bill.notes}
                     </div>
                   )}

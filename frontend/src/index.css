@@ -1,11 +1,2 @@
-*, *::before, *::after { box-sizing: border-box; }
-body { margin: 0; background: #0f1117; }
-#root { min-height: 100vh; }
-
-input, select, textarea {
-  font-family: inherit;
-}
-
-button {
-  font-family: inherit;
-}
+/* Globals live in theme.css; this file is intentionally minimal so legacy
+   imports keep working. Add only one-off utilities here if needed. */

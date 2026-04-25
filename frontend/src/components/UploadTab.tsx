@@ -145,7 +145,6 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
   const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
     if (files.length > 0) addFiles(files);
-    // Reset so re-selecting the same file fires onChange again.
     e.target.value = "";
   };
 
@@ -159,11 +158,21 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
     setQueue([]);
   };
 
-  const cardStyle = {
-    background: "#1a1d27",
-    borderRadius: 12,
-    border: "1px solid #2d3148",
+  const cardStyle: React.CSSProperties = {
+    background: "var(--surface-1)",
+    borderRadius: "var(--radius)",
+    border: "1px solid var(--border)",
     padding: 24,
+  };
+
+  const inputStyle: React.CSSProperties = {
+    width: "100%",
+    background: "var(--surface-2)",
+    border: "1px solid var(--border)",
+    borderRadius: 8,
+    color: "var(--text-1)",
+    padding: "8px 11px",
+    fontSize: 13,
   };
 
   const allDone = queue.length > 0 && queue.every(it => it.status !== "pending" && it.status !== "uploading");
@@ -176,14 +185,14 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
 
   return (
     <div style={{ maxWidth: 640, margin: "0 auto" }}>
-      <h2 style={{ color: "white", marginBottom: 8, fontSize: 22 }}>Upload Invoice / Bill</h2>
-      <p style={{ color: "#9ca3af", marginBottom: 16, fontSize: 14 }}>
+      <h2 style={{ color: "var(--text-1)", marginBottom: 8, fontSize: 22, letterSpacing: -0.2 }}>Upload Invoice / Bill</h2>
+      <p style={{ color: "var(--text-2)", marginBottom: 16, fontSize: 14 }}>
         Drop one or more files (up to {MAX_FILE_MB} MB each) to extract data.
       </p>
 
       {/* Parser selector */}
       <div style={{ ...cardStyle, marginBottom: 16, padding: 16 }}>
-        <div style={{ fontSize: 11, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 10, fontWeight: 600 }}>
+        <div style={{ fontSize: 11, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 10, fontWeight: 600 }}>
           Extraction method
         </div>
         <div style={{ display: "flex", gap: 8, marginBottom: parserMode === "freellmapi" ? 12 : 0 }}>
@@ -195,26 +204,27 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
               key={id}
               onClick={() => setParserMode(id)}
               disabled={running}
+              className="btn-press"
               style={{
                 flex: 1,
-                background: parserMode === id ? "#1e2640" : "#252838",
-                border: `1.5px solid ${parserMode === id ? "#2563eb" : "#374151"}`,
-                borderRadius: 8,
+                background: parserMode === id ? "var(--accent-soft)" : "var(--surface-2)",
+                border: `1.5px solid ${parserMode === id ? "var(--accent)" : "var(--border)"}`,
+                borderRadius: 10,
                 padding: "10px 12px",
                 cursor: running ? "not-allowed" : "pointer",
                 textAlign: "left",
                 opacity: running ? 0.6 : 1,
               }}
             >
-              <div style={{ color: parserMode === id ? "#93c5fd" : "#e5e7eb", fontSize: 13, fontWeight: 600 }}>{label}</div>
-              <div style={{ color: "#6b7280", fontSize: 11, marginTop: 2 }}>{desc}</div>
+              <div style={{ color: parserMode === id ? "var(--accent)" : "var(--text-1)", fontSize: 13, fontWeight: 600 }}>{label}</div>
+              <div style={{ color: "var(--text-3)", fontSize: 11, marginTop: 2 }}>{desc}</div>
             </button>
           ))}
         </div>
 
         {parserMode === "freellmapi" && (
-          <div>
-            <label style={{ fontSize: 12, color: "#9ca3af", display: "block", marginBottom: 4 }}>
+          <div className="fade-in">
+            <label style={{ fontSize: 12, color: "var(--text-2)", display: "block", marginBottom: 4 }}>
               Model {modelsLoading ? "(loading live list…)" : `(${availableModels.length - 1} available)`}
             </label>
             <select
@@ -222,13 +232,7 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
               onChange={(e) => setSelectedModel(e.target.value)}
               disabled={modelsLoading || running}
               style={{
-                width: "100%",
-                background: "#252838",
-                border: "1px solid #374151",
-                borderRadius: 6,
-                color: "#e5e7eb",
-                padding: "7px 10px",
-                fontSize: 13,
+                ...inputStyle,
                 cursor: modelsLoading || running ? "not-allowed" : "pointer",
                 opacity: modelsLoading || running ? 0.6 : 1,
               }}
@@ -245,21 +249,15 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
                 placeholder="e.g. gemini-2.5-flash"
                 disabled={running}
                 style={{
-                  width: "100%",
-                  background: "#252838",
-                  border: "1px solid #374151",
-                  borderRadius: 6,
-                  color: "#e5e7eb",
-                  padding: "7px 10px",
-                  fontSize: 13,
+                  ...inputStyle,
                   marginTop: 6,
                   fontFamily: "monospace",
                 }}
               />
             )}
-            <div style={{ fontSize: 11, color: "#6b7280", marginTop: 6 }}>
+            <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 6 }}>
               Manage provider keys and fallback order in the FreeLLMAPI dashboard at{" "}
-              <a href="http://localhost:3001" target="_blank" rel="noreferrer" style={{ color: "#93c5fd" }}>
+              <a href="http://localhost:3001" target="_blank" rel="noreferrer" style={{ color: "var(--accent)" }}>
                 localhost:3001
               </a>
             </div>
@@ -275,12 +273,13 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
           onDrop={onDrop}
           style={{
             ...cardStyle,
-            border: `2px dashed ${dragging ? "#2563eb" : "#374151"}`,
-            background: dragging ? "#1e2640" : "#1a1d27",
+            border: `2px dashed ${dragging ? "var(--accent)" : "var(--border-strong)"}`,
+            background: dragging ? "var(--accent-soft)" : "var(--surface-1)",
             textAlign: "center",
             padding: "48px 24px",
             cursor: "pointer",
-            transition: "all 0.15s",
+            transition: "background 180ms ease, border-color 180ms ease, transform 180ms ease",
+            transform: dragging ? "scale(1.01)" : "scale(1)",
           }}
           onClick={() => fileInputRef.current?.click()}
         >
@@ -293,12 +292,22 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
             onChange={onFileChange}
           />
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
-            <div style={{ width: 64, height: 64, background: "#1e2640", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <Upload size={28} color="#2563eb" />
+            <div
+              style={{
+                width: 64, height: 64,
+                background: "var(--accent-soft)",
+                borderRadius: "50%",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                color: "var(--accent)",
+                boxShadow: dragging ? "var(--shadow-accent)" : "none",
+                transition: "box-shadow 180ms ease",
+              }}
+            >
+              <Upload size={28} />
             </div>
             <div>
-              <p style={{ color: "white", margin: 0, fontWeight: 600 }}>Drop your bills here</p>
-              <p style={{ color: "#9ca3af", margin: "4px 0 0", fontSize: 13 }}>
+              <p style={{ color: "var(--text-1)", margin: 0, fontWeight: 600 }}>Drop your bills here</p>
+              <p style={{ color: "var(--text-2)", margin: "4px 0 0", fontSize: 13 }}>
                 or click to browse — multiple files allowed, up to {MAX_FILE_MB} MB each
               </p>
             </div>
@@ -310,10 +319,10 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
       {queue.length > 0 && (
         <div style={{ ...cardStyle, padding: 16 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-            <div style={{ color: "white", fontSize: 14, fontWeight: 600 }}>
+            <div style={{ color: "var(--text-1)", fontSize: 14, fontWeight: 600 }}>
               {running ? `Processing ${queue.length} file${queue.length === 1 ? "" : "s"}…` : `${queue.length} file${queue.length === 1 ? "" : "s"}`}
               {!running && allDone && (
-                <span style={{ color: "#6b7280", fontWeight: 400, marginLeft: 8 }}>
+                <span style={{ color: "var(--text-3)", fontWeight: 400, marginLeft: 8 }}>
                   · {successCount} succeeded{problemCount > 0 ? `, ${problemCount} with issues` : ""}
                 </span>
               )}
@@ -321,11 +330,12 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
             {allDone && !running && (
               <button
                 onClick={clearAll}
+                className="btn-press"
                 style={{
                   background: "transparent",
-                  border: "1px solid #374151",
+                  border: "1px solid var(--border)",
                   borderRadius: 6,
-                  color: "#9ca3af",
+                  color: "var(--text-2)",
                   padding: "5px 10px",
                   fontSize: 12,
                   cursor: "pointer",
@@ -335,16 +345,16 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
               </button>
             )}
           </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            {queue.map(item => (
-              <QueueRow key={item.id} item={item} onRemove={removeItem} disabled={running} />
+          <div className="list-stagger" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {queue.map((item, i) => (
+              <QueueRow key={item.id} item={item} index={i} onRemove={removeItem} disabled={running} />
             ))}
           </div>
           {allDone && successCount > 0 && (
-            <div style={{ marginTop: 12, fontSize: 12, color: "#9ca3af" }}>
+            <div className="fade-in" style={{ marginTop: 12, fontSize: 12, color: "var(--text-2)" }}>
               {problemCount === 0
                 ? "Redirecting to bills list…"
-                : <>Some files had issues — you can fix them and try again, or <button onClick={onSuccess} style={{ background: "transparent", border: "none", color: "#93c5fd", cursor: "pointer", padding: 0, fontSize: 12, textDecoration: "underline" }}>view bills</button>.</>}
+                : <>Some files had issues — you can fix them and try again, or <button onClick={onSuccess} style={{ background: "transparent", border: "none", color: "var(--accent)", cursor: "pointer", padding: 0, fontSize: 12, textDecoration: "underline" }}>view bills</button>.</>}
             </div>
           )}
         </div>
@@ -352,28 +362,28 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
 
       {/* Detail panel — only when exactly one file was processed. */}
       {detailItem && parsed && Boolean(parsed._low_quality) && (
-        <div style={{
+        <div className="slide-up" style={{
           ...cardStyle,
           marginTop: 24,
-          borderLeft: "3px solid #f59e0b",
-          background: "#1f1a0e",
+          borderLeft: "3px solid var(--warning)",
+          background: "var(--warning-soft)",
           display: "flex",
           gap: 12,
           alignItems: "flex-start",
         }}>
-          <AlertCircle size={20} color="#f59e0b" style={{ flexShrink: 0, marginTop: 1 }} />
+          <AlertCircle size={20} style={{ flexShrink: 0, marginTop: 1, color: "var(--warning)" }} />
           <div>
-            <div style={{ color: "#f59e0b", fontWeight: 600, fontSize: 14, marginBottom: 4 }}>
+            <div style={{ color: "var(--warning)", fontWeight: 600, fontSize: 14, marginBottom: 4 }}>
               Couldn't extract data from this invoice
             </div>
             {typeof parsed.error === "string" ? (
-              <div style={{ color: "#d1d5db", fontSize: 13, lineHeight: 1.5, marginBottom: 8 }}>
-                <code style={{ background: "#252838", padding: "2px 6px", borderRadius: 4, fontSize: 12 }}>
+              <div style={{ color: "var(--text-1)", fontSize: 13, lineHeight: 1.5, marginBottom: 8 }}>
+                <code style={{ background: "var(--surface-2)", padding: "2px 6px", borderRadius: 4, fontSize: 12 }}>
                   {parsed.error}
                 </code>
               </div>
             ) : null}
-            <div style={{ color: "#d1d5db", fontSize: 13, lineHeight: 1.5 }}>
+            <div style={{ color: "var(--text-1)", fontSize: 13, lineHeight: 1.5 }}>
               {parserMode === "freellmapi" ? (
                 <>
                   Try a different model from the dropdown, or check that FreeLLMAPI
@@ -382,7 +392,7 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
               ) : (
                 <>
                   The local OCR parser found very little data. Switch to{" "}
-                  <strong style={{ color: "#93c5fd" }}>AI (FreeLLMAPI)</strong> above and
+                  <strong style={{ color: "var(--accent)" }}>AI (FreeLLMAPI)</strong> above and
                   re-upload so FreeLLMAPI can structure the extracted text.
                 </>
               )}
@@ -392,17 +402,17 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
       )}
 
       {detailItem && parsed && parsed._routed_via ? (
-        <div style={{
+        <div className="fade-in" style={{
           ...cardStyle,
           marginTop: 16,
-          borderLeft: "3px solid #2563eb",
+          borderLeft: "3px solid var(--accent)",
           padding: "10px 14px",
           fontSize: 12,
         }}>
-          <div style={{ color: "#93c5fd", fontWeight: 600, marginBottom: 4 }}>
+          <div style={{ color: "var(--accent)", fontWeight: 600, marginBottom: 4 }}>
             FreeLLMAPI routed this request via <code>{String(parsed._routed_via)}</code>
           </div>
-          <div style={{ color: "#6b7280" }}>
+          <div style={{ color: "var(--text-3)" }}>
             Requested model: <code>{String(parsed._model_used ?? "auto")}</code>
           </div>
         </div>
@@ -410,8 +420,8 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
 
       {detailItem && parsed && (
         <>
-          <div style={{ ...cardStyle, marginTop: 24 }}>
-            <h3 style={{ color: "white", margin: "0 0 16px", fontSize: 16 }}>
+          <div className="slide-up" style={{ ...cardStyle, marginTop: 24 }}>
+            <h3 style={{ color: "var(--text-1)", margin: "0 0 16px", fontSize: 16 }}>
               {UTILITY_ICONS[parsed.utility_type as string] || "📄"} Extracted Details
             </h3>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 24px" }}>
@@ -427,8 +437,8 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
               ].map(([label, value]) =>
                 value ? (
                   <div key={String(label)}>
-                    <div style={{ fontSize: 11, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>{String(label)}</div>
-                    <div style={{ fontSize: 14, color: "#e5e7eb", marginTop: 2 }}>{String(value)}</div>
+                    <div style={{ fontSize: 11, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.05em" }}>{String(label)}</div>
+                    <div style={{ fontSize: 14, color: "var(--text-1)", marginTop: 2 }}>{String(value)}</div>
                   </div>
                 ) : null
               )}
@@ -436,11 +446,11 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
           </div>
 
           {parsed.translated_summary ? (
-            <div style={{ ...cardStyle, marginTop: 16, borderLeft: "3px solid #2563eb" }}>
-              <div style={{ fontSize: 11, color: "#2563eb", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6, fontWeight: 600 }}>
+            <div style={{ ...cardStyle, marginTop: 16, borderLeft: "3px solid var(--accent)" }}>
+              <div style={{ fontSize: 11, color: "var(--accent)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6, fontWeight: 600 }}>
                 🌍 English Summary
               </div>
-              <div style={{ fontSize: 14, color: "#e5e7eb", lineHeight: 1.5 }}>
+              <div style={{ fontSize: 14, color: "var(--text-1)", lineHeight: 1.5 }}>
                 {String(parsed.translated_summary)}
               </div>
             </div>
@@ -448,21 +458,21 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
 
           {Array.isArray(parsed.line_items) && parsed.line_items.length > 0 ? (
             <div style={{ ...cardStyle, marginTop: 16 }}>
-              <h3 style={{ color: "white", margin: "0 0 12px", fontSize: 14 }}>Line Items</h3>
+              <h3 style={{ color: "var(--text-1)", margin: "0 0 12px", fontSize: 14 }}>Line Items</h3>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                 <thead>
-                  <tr style={{ borderBottom: "1px solid #2d3148" }}>
-                    <th style={{ padding: "8px 0", textAlign: "left", color: "#6b7280", fontSize: 11, textTransform: "uppercase", fontWeight: 600 }}>Description</th>
-                    <th style={{ padding: "8px 0", textAlign: "left", color: "#6b7280", fontSize: 11, textTransform: "uppercase", fontWeight: 600 }}>English</th>
-                    <th style={{ padding: "8px 0", textAlign: "right", color: "#6b7280", fontSize: 11, textTransform: "uppercase", fontWeight: 600 }}>Amount</th>
+                  <tr style={{ borderBottom: "1px solid var(--border)" }}>
+                    <th style={{ padding: "8px 0", textAlign: "left", color: "var(--text-3)", fontSize: 11, textTransform: "uppercase", fontWeight: 600 }}>Description</th>
+                    <th style={{ padding: "8px 0", textAlign: "left", color: "var(--text-3)", fontSize: 11, textTransform: "uppercase", fontWeight: 600 }}>English</th>
+                    <th style={{ padding: "8px 0", textAlign: "right", color: "var(--text-3)", fontSize: 11, textTransform: "uppercase", fontWeight: 600 }}>Amount</th>
                   </tr>
                 </thead>
                 <tbody>
                   {(parsed.line_items as Array<Record<string, unknown>>).map((li, i) => (
-                    <tr key={i} style={{ borderBottom: "1px solid #1e2132" }}>
-                      <td style={{ padding: "8px 8px 8px 0", color: "#9ca3af" }}>{String(li.description_et ?? "—")}</td>
-                      <td style={{ padding: "8px 0", color: "#e5e7eb" }}>{String(li.description_en ?? "—")}</td>
-                      <td style={{ padding: "8px 0", textAlign: "right", color: "#22c55e", fontVariantNumeric: "tabular-nums" }}>
+                    <tr key={i} style={{ borderBottom: "1px solid var(--divider)" }}>
+                      <td style={{ padding: "8px 8px 8px 0", color: "var(--text-2)" }}>{String(li.description_et ?? "—")}</td>
+                      <td style={{ padding: "8px 0", color: "var(--text-1)" }}>{String(li.description_en ?? "—")}</td>
+                      <td style={{ padding: "8px 0", textAlign: "right", color: "var(--success)", fontVariantNumeric: "tabular-nums" }}>
                         {li.amount_eur != null ? `€${(li.amount_eur as number).toFixed(2)}` : "—"}
                       </td>
                     </tr>
@@ -474,13 +484,13 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
 
           {parsed.glossary && typeof parsed.glossary === "object" && Object.keys(parsed.glossary as object).length > 0 ? (
             <div style={{ ...cardStyle, marginTop: 16 }}>
-              <h3 style={{ color: "white", margin: "0 0 12px", fontSize: 14 }}>📖 Glossary</h3>
+              <h3 style={{ color: "var(--text-1)", margin: "0 0 12px", fontSize: 14 }}>📖 Glossary</h3>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 8 }}>
                 {Object.entries(parsed.glossary as Record<string, string>).map(([et, en]) => (
-                  <div key={et} style={{ background: "#252838", padding: "8px 12px", borderRadius: 6, fontSize: 13 }}>
-                    <span style={{ color: "#9ca3af" }}>{et}</span>
-                    <span style={{ color: "#6b7280", margin: "0 6px" }}>→</span>
-                    <span style={{ color: "#e5e7eb" }}>{en}</span>
+                  <div key={et} style={{ background: "var(--surface-2)", padding: "8px 12px", borderRadius: 6, fontSize: 13 }}>
+                    <span style={{ color: "var(--text-2)" }}>{et}</span>
+                    <span style={{ color: "var(--text-3)", margin: "0 6px" }}>→</span>
+                    <span style={{ color: "var(--text-1)" }}>{en}</span>
                   </div>
                 ))}
               </div>
@@ -490,19 +500,19 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
       )}
 
       <div style={{ ...cardStyle, marginTop: 24 }}>
-        <h3 style={{ color: "white", margin: "0 0 4px", fontSize: 14 }}>Supported Invoice Types</h3>
-        <p style={{ color: "#6b7280", fontSize: 12, margin: "0 0 12px" }}>
+        <h3 style={{ color: "var(--text-1)", margin: "0 0 4px", fontSize: 14 }}>Supported Invoice Types</h3>
+        <p style={{ color: "var(--text-3)", fontSize: 12, margin: "0 0 12px" }}>
           Local OCR works best with standard-layout PDF invoices.
           AI (FreeLLMAPI) uses local OCR first, then routes text extraction through your free LLM providers.
         </p>
 
         <div style={{ marginBottom: 10 }}>
-          <div style={{ fontSize: 11, color: "#2563eb", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6, fontWeight: 600 }}>
+          <div style={{ fontSize: 11, color: "var(--accent)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6, fontWeight: 600 }}>
             Utility Bills (best local OCR accuracy)
           </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
             {["Electricity", "Gas", "Water", "Heating", "Internet / Telecom", "Waste Collection", "Housing Association"].map(p => (
-              <span key={p} style={{ background: "#1e2640", border: "1px solid #2563eb", borderRadius: 6, padding: "4px 10px", fontSize: 12, color: "#93c5fd" }}>
+              <span key={p} style={{ background: "var(--accent-soft)", border: "1px solid var(--accent)", borderRadius: 6, padding: "4px 10px", fontSize: 12, color: "var(--accent)" }}>
                 {p}
               </span>
             ))}
@@ -510,41 +520,40 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
         </div>
 
         <div>
-          <div style={{ fontSize: 11, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>
+          <div style={{ fontSize: 11, color: "var(--text-2)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>
             Any invoice (AI / FreeLLMAPI)
           </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
             {["Rent", "Subscriptions", "Services", "Repairs", "Insurance", "Any format or language"].map(p => (
-              <span key={p} style={{ background: "#252838", border: "1px solid #374151", borderRadius: 6, padding: "4px 10px", fontSize: 12, color: "#d1d5db" }}>
+              <span key={p} style={{ background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 6, padding: "4px 10px", fontSize: 12, color: "var(--text-1)" }}>
                 {p}
               </span>
             ))}
           </div>
         </div>
       </div>
-
-      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }
 
 interface QueueRowProps {
   item: QueueItem;
+  index: number;
   onRemove: (id: string) => void;
   disabled: boolean;
 }
 
-function QueueRow({ item, onRemove, disabled }: QueueRowProps) {
+function QueueRow({ item, index, onRemove, disabled }: QueueRowProps) {
   const { status, file, errorMsg } = item;
   const StatusIcon = (() => {
     switch (status) {
-      case "uploading": return <Loader2 size={16} color="#2563eb" style={{ animation: "spin 1s linear infinite" }} />;
-      case "success": return <CheckCircle size={16} color="#22c55e" />;
-      case "replaced": return <RefreshCw size={16} color="#f59e0b" />;
-      case "low_quality": return <AlertCircle size={16} color="#f59e0b" />;
+      case "uploading": return <Loader2 size={16} style={{ color: "var(--accent)", animation: "spin 1s linear infinite" }} />;
+      case "success": return <CheckCircle size={16} style={{ color: "var(--success)" }} />;
+      case "replaced": return <RefreshCw size={16} style={{ color: "var(--warning)" }} />;
+      case "low_quality": return <AlertCircle size={16} style={{ color: "var(--warning)" }} />;
       case "error":
-      case "too_large": return <AlertCircle size={16} color="#ef4444" />;
-      default: return <FileText size={16} color="#6b7280" />;
+      case "too_large": return <AlertCircle size={16} style={{ color: "var(--danger)" }} />;
+      default: return <FileText size={16} style={{ color: "var(--text-3)" }} />;
     }
   })();
   const statusLabel = (() => {
@@ -560,13 +569,13 @@ function QueueRow({ item, onRemove, disabled }: QueueRowProps) {
   })();
   const statusColor = (() => {
     switch (status) {
-      case "success": return "#22c55e";
+      case "success": return "var(--success)";
       case "replaced":
-      case "low_quality": return "#f59e0b";
+      case "low_quality": return "var(--warning)";
       case "error":
-      case "too_large": return "#ef4444";
-      case "uploading": return "#93c5fd";
-      default: return "#9ca3af";
+      case "too_large": return "var(--danger)";
+      case "uploading": return "var(--accent)";
+      default: return "var(--text-2)";
     }
   })();
   const canRemove = !disabled && status !== "uploading";
@@ -576,13 +585,14 @@ function QueueRow({ item, onRemove, disabled }: QueueRowProps) {
       alignItems: "center",
       gap: 10,
       padding: "8px 10px",
-      background: "#252838",
+      background: "var(--surface-2)",
       borderRadius: 8,
-      border: status === "error" || status === "too_large" ? "1px solid #ef4444" : "1px solid transparent",
-    }}>
+      border: status === "error" || status === "too_large" ? "1px solid var(--danger)" : "1px solid transparent",
+      ["--i" as string]: Math.min(index, 12),
+    } as React.CSSProperties}>
       <div style={{ flexShrink: 0 }}>{StatusIcon}</div>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ color: "#e5e7eb", fontSize: 13, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        <div style={{ color: "var(--text-1)", fontSize: 13, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {file.name}
         </div>
         <div style={{ color: statusColor, fontSize: 11, marginTop: 1 }}>
@@ -596,7 +606,7 @@ function QueueRow({ item, onRemove, disabled }: QueueRowProps) {
           style={{
             background: "transparent",
             border: "none",
-            color: "#6b7280",
+            color: "var(--text-3)",
             cursor: "pointer",
             padding: 4,
             display: "flex",

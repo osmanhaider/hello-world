@@ -1,0 +1,255 @@
+/* =========================================================================
+   Theme: Warm Finance
+   - Default = dark (deep slate + emerald)
+   - [data-theme="light"] = cream + emerald
+   - All chrome (bg, surface, text, border, accent) flows from these vars.
+   - Functional colors (utility-type chart palette, status badges) stay
+     as their own constants in JS.
+   ========================================================================= */
+
+:root {
+  /* Surface */
+  --bg: #0c111c;
+  --bg-elev: #10141f;
+  --surface-1: #161b27;
+  --surface-2: #1d2330;
+  --surface-3: #232a3a;
+
+  /* Borders & dividers */
+  --border: #2a3142;
+  --border-strong: #374151;
+  --divider: #1e2230;
+
+  /* Text */
+  --text-1: #e8eaed;
+  --text-2: #9aa3b2;
+  --text-3: #6b7280;
+  --text-on-accent: #ffffff;
+
+  /* Accent (emerald) */
+  --accent: #10b981;
+  --accent-strong: #059669;
+  --accent-soft: rgba(16, 185, 129, 0.14);
+  --accent-ring: rgba(16, 185, 129, 0.28);
+
+  /* Status */
+  --success: #22c55e;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --danger-strong: #dc2626;
+  --info: #0ea5e9;
+  --warning-soft: rgba(245, 158, 11, 0.12);
+  --danger-soft: rgba(239, 68, 68, 0.10);
+  --info-soft: rgba(14, 165, 233, 0.10);
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 18px 40px rgba(0, 0, 0, 0.45);
+  --shadow-accent: 0 6px 22px rgba(16, 185, 129, 0.25);
+
+  /* Misc */
+  --focus-ring: 0 0 0 3px rgba(16, 185, 129, 0.30);
+  --radius-sm: 6px;
+  --radius: 10px;
+  --radius-lg: 14px;
+}
+
+[data-theme="light"] {
+  --bg: #fbf9f5;
+  --bg-elev: #ffffff;
+  --surface-1: #ffffff;
+  --surface-2: #f5f3ee;
+  --surface-3: #ece8df;
+
+  --border: #e7e3da;
+  --border-strong: #d4cfc3;
+  --divider: #efeae0;
+
+  --text-1: #1a1f2c;
+  --text-2: #4b5563;
+  --text-3: #7c8492;
+
+  --accent: #059669;
+  --accent-strong: #047857;
+  --accent-soft: rgba(5, 150, 105, 0.10);
+  --accent-ring: rgba(5, 150, 105, 0.20);
+
+  --success: #16a34a;
+  --warning: #d97706;
+  --danger: #dc2626;
+  --danger-strong: #b91c1c;
+  --info: #0284c7;
+  --warning-soft: rgba(217, 119, 6, 0.10);
+  --danger-soft: rgba(220, 38, 38, 0.08);
+  --info-soft: rgba(2, 132, 199, 0.08);
+
+  --shadow-sm: 0 1px 2px rgba(20, 30, 60, 0.06);
+  --shadow-md: 0 6px 18px rgba(20, 30, 60, 0.08);
+  --shadow-lg: 0 22px 50px rgba(20, 30, 60, 0.10);
+  --shadow-accent: 0 6px 22px rgba(5, 150, 105, 0.18);
+
+  --focus-ring: 0 0 0 3px rgba(5, 150, 105, 0.22);
+}
+
+/* =========================================================================
+   Globals
+   ========================================================================= */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text-1);
+  font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+input, select, textarea, button {
+  font-family: inherit;
+}
+
+::selection {
+  background: var(--accent-soft);
+  color: var(--text-1);
+}
+
+/* Smooth theme swap. We transition the small set of properties most
+   components rely on; component-level transitions can opt out by
+   setting `transition: none` if needed. */
+* {
+  transition:
+    background-color 200ms ease,
+    color 200ms ease,
+    border-color 200ms ease,
+    box-shadow 200ms ease,
+    fill 200ms ease,
+    stroke 200ms ease;
+}
+/* Don't fight the spinner / progress animations. */
+.no-theme-transition,
+.no-theme-transition * {
+  transition: none !important;
+}
+
+/* Pretty scrollbars on Webkit; native on Firefox. */
+@media (pointer: fine) {
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb {
+    background: var(--surface-3);
+    border-radius: 8px;
+    border: 2px solid var(--bg);
+  }
+  ::-webkit-scrollbar-thumb:hover { background: var(--border-strong); }
+}
+
+/* =========================================================================
+   Keyframes
+   ========================================================================= */
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes shimmer {
+  0% { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+
+@keyframes pulseAccent {
+  0%, 100% { box-shadow: 0 0 0 0 var(--accent-ring); }
+  50%      { box-shadow: 0 0 0 6px transparent; }
+}
+
+@keyframes gradientPulse {
+  0%, 100% { filter: brightness(1); }
+  50%      { filter: brightness(1.18); }
+}
+
+/* =========================================================================
+   Utility classes
+   ========================================================================= */
+
+.fade-in {
+  animation: fadeIn 240ms ease;
+}
+
+.slide-up {
+  animation: slideUp 280ms ease both;
+}
+
+.tab-content {
+  animation: slideUp 240ms ease;
+}
+
+.list-stagger > * {
+  opacity: 0;
+  animation: slideUp 320ms ease forwards;
+  animation-delay: calc(var(--i, 0) * 28ms);
+}
+
+.skeleton {
+  background:
+    linear-gradient(
+      90deg,
+      var(--surface-2) 0%,
+      var(--surface-3) 50%,
+      var(--surface-2) 100%
+    );
+  background-size: 800px 100%;
+  animation: shimmer 1.4s linear infinite;
+  border-radius: var(--radius-sm);
+}
+
+.pulse-accent {
+  animation: pulseAccent 1.6s ease-in-out infinite;
+}
+
+/* Card with a soft hover lift. Apply via className. */
+.lift {
+  transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+}
+.lift:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+  border-color: var(--border-strong);
+}
+
+/* Buttons that should react to hover. */
+.btn-press {
+  transition: transform 120ms ease, background-color 180ms ease, box-shadow 180ms ease, color 180ms ease, border-color 180ms ease;
+}
+.btn-press:hover { transform: translateY(-1px); }
+.btn-press:active { transform: translateY(0); }
+.btn-press:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+
+/* Text helpers (used sparingly). */
+.muted { color: var(--text-3); }
+
+/* Reduced motion users get static UI. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
