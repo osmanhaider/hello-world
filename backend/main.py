@@ -15,8 +15,10 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 import auth as auth_mod
+import byok as byok_mod
 import google_auth as google_auth_mod
 from parser import parse_bill as parse_bill_tesseract
+from parser_byok import parse_bill_with_byok
 from parser_freellmapi import parse_bill_with_freellmapi
 from translation import classify_line_item, enrich_parsed
 
@@ -101,6 +103,26 @@ async def init_db() -> None:
                 created_at TEXT NOT NULL
             )
         """)
+        # Per-user BYOK API keys for OpenAI-compatible providers. The plaintext
+        # key never lives in the DB — encrypted_key/iv/tag come from AES-GCM
+        # in `byok.py` using the BYOK_ENCRYPTION_KEY env var.
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS user_api_keys (
+                id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                label TEXT NOT NULL,
+                provider TEXT NOT NULL,
+                encrypted_key TEXT NOT NULL,
+                iv TEXT NOT NULL,
+                tag TEXT NOT NULL,
+                default_model TEXT,
+                created_at TEXT NOT NULL,
+                UNIQUE(user_id, label)
+            )
+        """)
+        await db.execute(
+            "CREATE INDEX IF NOT EXISTS user_api_keys_user_id_idx ON user_api_keys(user_id)"
+        )
         # Migrations for existing databases. We only ever add columns —
         # never drop or rename — so legacy rows remain queryable.
         async with db.execute("PRAGMA table_info(bills)") as c:
@@ -387,6 +409,7 @@ async def upload_bill(
     file: UploadFile = File(...),
     parser: str | None = Form(None),
     model: str | None = Form(None),
+    byok_key_id: str | None = Form(None),
     user_id: str = Depends(get_user_id),
 ):
     if file.content_type not in _ALLOWED_MIME:
@@ -418,6 +441,11 @@ async def upload_bill(
             f.write(chunk)
 
     effective_parser = (parser or PARSER_BACKEND).lower()
+    if byok_key_id:
+        # `byok_key_id` always wins regardless of `parser`, since the user
+        # explicitly picked a saved key and providing one only makes sense
+        # in BYOK mode.
+        effective_parser = "byok"
     parse_error: str | None = None
     try:
         if effective_parser == "claude":
@@ -428,6 +456,22 @@ async def upload_bill(
                 base_url=FREELLMAPI_BASE_URL,
                 api_key=FREELLMAPI_API_KEY,
                 model=model or FREELLMAPI_MODEL,
+            )
+        elif effective_parser == "byok":
+            byok_row = await _resolve_byok_key(user_id, byok_key_id)
+            try:
+                plaintext_key = byok_mod.decrypt(
+                    byok_row["encrypted_key"], byok_row["iv"], byok_row["tag"],
+                )
+            except Exception as e:
+                raise RuntimeError(
+                    "Couldn't decrypt your saved API key. Re-add it from Settings."
+                ) from e
+            parsed = parse_bill_with_byok(
+                save_path,
+                provider_id=byok_row["provider"],
+                api_key=plaintext_key,
+                model=model or byok_row.get("default_model"),
             )
         else:
             parsed = parse_bill_tesseract(save_path)
@@ -1088,3 +1132,151 @@ async def community_analytics(
 ):
     """Aggregate analytics across the whole community, or one user. Public bills only."""
     return await _compute_analytics(target_user_id, public_only=True)
+
+
+# ────────────────────────────────────────────────────────────────────────
+# Bring-your-own-key (BYOK) endpoints.
+# Each user can store API keys for OpenAI-compatible providers, encrypted
+# at rest with AES-GCM. Plaintext never leaves the backend.
+# ────────────────────────────────────────────────────────────────────────
+
+
+def _require_byok_configured() -> None:
+    if not byok_mod.is_configured():
+        raise HTTPException(
+            503,
+            "BYOK is disabled because BYOK_ENCRYPTION_KEY is not set on the server.",
+        )
+
+
+async def _resolve_byok_key(user_id: str, key_id: str) -> dict:
+    """Fetch a user's saved key row, scoped by user_id. Raises 404 otherwise."""
+    _require_byok_configured()
+    async with _db() as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT id, user_id, label, provider, encrypted_key, iv, tag, default_model "
+            "FROM user_api_keys WHERE id = ? AND user_id = ?",
+            (key_id, user_id),
+        ) as c:
+            row = await c.fetchone()
+    if not row:
+        raise HTTPException(404, "API key not found.")
+    return dict(row)
+
+
+class ByokKeyCreate(BaseModel):
+    label: str
+    provider: str
+    key: str
+    default_model: str | None = None
+
+
+@app.get("/api/byok-providers")
+async def byok_providers(_user_id: str = Depends(get_user_id)):
+    """Public catalogue of supported OpenAI-compatible providers."""
+    return {
+        "configured": byok_mod.is_configured(),
+        "providers": [
+            {
+                "id": p.id,
+                "name": p.name,
+                "default_model": p.default_model,
+                "key_hint": p.key_hint,
+                "key_url": p.key_url,
+            }
+            for p in byok_mod.PROVIDERS.values()
+        ],
+    }
+
+
+@app.get("/api/byok-keys")
+async def byok_keys_list(user_id: str = Depends(get_user_id)):
+    """Return the caller's saved keys with masked values — never plaintext."""
+    _require_byok_configured()
+    async with _db() as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT id, label, provider, encrypted_key, iv, tag, default_model, created_at "
+            "FROM user_api_keys WHERE user_id = ? ORDER BY created_at DESC",
+            (user_id,),
+        ) as c:
+            rows = await c.fetchall()
+    out = []
+    for row in rows:
+        try:
+            plain = byok_mod.decrypt(row["encrypted_key"], row["iv"], row["tag"])
+            masked = byok_mod.mask_key(plain)
+        except Exception:
+            masked = "(decrypt failed)"
+        out.append({
+            "id": row["id"],
+            "label": row["label"],
+            "provider": row["provider"],
+            "masked_key": masked,
+            "default_model": row["default_model"],
+            "created_at": row["created_at"],
+        })
+    return out
+
+
+@app.post("/api/byok-keys", status_code=201)
+async def byok_keys_create(
+    body: ByokKeyCreate,
+    user_id: str = Depends(get_user_id),
+):
+    _require_byok_configured()
+    if body.provider not in byok_mod.PROVIDERS:
+        raise HTTPException(400, f"Unknown provider: {body.provider!r}")
+    label = body.label.strip()
+    plain = body.key.strip()
+    if not label:
+        raise HTTPException(400, "Label is required.")
+    if len(plain) < 8:
+        raise HTTPException(400, "API key looks too short to be valid.")
+
+    try:
+        ct, iv, tag = byok_mod.encrypt(plain)
+    except byok_mod.ByokError as e:
+        raise HTTPException(503, str(e)) from e
+
+    new_id = uuid.uuid4().hex
+    now = datetime.now(timezone.utc).isoformat()
+    try:
+        async with _db() as db:
+            await db.execute(
+                """
+                INSERT INTO user_api_keys
+                    (id, user_id, label, provider, encrypted_key, iv, tag, default_model, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (new_id, user_id, label, body.provider, ct, iv, tag,
+                 (body.default_model or "").strip() or None, now),
+            )
+            await db.commit()
+    except aiosqlite.IntegrityError as e:
+        raise HTTPException(409, f"You already have a key with label {label!r}.") from e
+
+    return {
+        "id": new_id,
+        "label": label,
+        "provider": body.provider,
+        "masked_key": byok_mod.mask_key(plain),
+        "default_model": (body.default_model or "").strip() or None,
+        "created_at": now,
+    }
+
+
+@app.delete("/api/byok-keys/{key_id}")
+async def byok_keys_delete(key_id: str, user_id: str = Depends(get_user_id)):
+    _require_byok_configured()
+    async with _db() as db:
+        async with db.execute(
+            "DELETE FROM user_api_keys WHERE id = ? AND user_id = ?",
+            (key_id, user_id),
+        ) as cursor:
+            affected = cursor.rowcount
+        await db.commit()
+    if affected == 0:
+        raise HTTPException(404, "API key not found.")
+    return {"status": "deleted"}

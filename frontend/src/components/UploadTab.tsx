@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import axios from "axios";
-import { api } from "../api";
+import { api, type ByokKey } from "../api";
 import {
   Upload, CheckCircle, AlertCircle, Loader2, RefreshCw, FileText, X,
   ChevronDown, ChevronUp,
@@ -27,7 +27,7 @@ interface UploadTabProps {
 }
 
 type ItemStatus = "pending" | "uploading" | "success" | "replaced" | "error" | "low_quality" | "too_large";
-type ParserMode = "tesseract" | "freellmapi";
+type ParserMode = "tesseract" | "freellmapi" | "byok";
 
 interface QueueItem {
   id: string;
@@ -63,6 +63,9 @@ export default function UploadTab({ onSuccess, onRunningChange }: UploadTabProps
   const [customModel, setCustomModel] = useState("");
   const [modelsLoading, setModelsLoading] = useState(true);
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
+  const [byokKeys, setByokKeys] = useState<ByokKey[]>([]);
+  const [byokKeyId, setByokKeyId] = useState<string>("");
+  const [byokModelOverride, setByokModelOverride] = useState<string>("");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -84,6 +87,29 @@ export default function UploadTab({ onSuccess, onRunningChange }: UploadTabProps
     return () => { cancelled = true; };
   }, []);
 
+  /** Refresh saved BYOK keys. Called on mount and whenever the user picks
+   * the BYOK parser mode (so adding/removing keys in Settings is reflected
+   * without remounting the always-mounted UploadTab). */
+  const reloadByokKeys = useCallback(() => {
+    api.listMyByokKeys()
+      .then(res => {
+        const keys = res.data ?? [];
+        setByokKeys(keys);
+        setByokKeyId(prev => keys.find(k => k.id === prev)?.id ?? keys[0]?.id ?? "");
+      })
+      .catch(() => {
+        // BYOK might be disabled on the server — keep the option hidden.
+      });
+  }, []);
+
+  useEffect(() => {
+    reloadByokKeys();
+  }, [reloadByokKeys]);
+
+  useEffect(() => {
+    if (parserMode === "byok") reloadByokKeys();
+  }, [parserMode, reloadByokKeys]);
+
   const updateItem = useCallback((id: string, patch: Partial<QueueItem>) => {
     setQueue(q => q.map(it => (it.id === id ? { ...it, ...patch } : it)));
   }, []);
@@ -93,11 +119,15 @@ export default function UploadTab({ onSuccess, onRunningChange }: UploadTabProps
     const effectiveModel =
       parserMode === "freellmapi"
         ? (selectedModel === "__custom__" ? customModel.trim() : selectedModel)
-        : undefined;
+        : parserMode === "byok"
+          ? byokModelOverride.trim() || undefined
+          : undefined;
+    const effectiveByokKeyId = parserMode === "byok" ? byokKeyId : undefined;
 
     // Free-tier providers (Gemini, etc.) cap at ~10 requests/minute. Pace
     // multi-file batches when going through FreeLLMAPI so we stay under
-    // their per-minute window. Local OCR has no rate limit.
+    // their per-minute window. Local OCR and BYOK paid keys have no
+    // shared rate-limit concern, so they go back-to-back.
     const pendingCount = items.filter(it => it.status === "pending").length;
     const paceMs = parserMode === "freellmapi" && pendingCount > 1 ? 6500 : 0;
 
@@ -112,7 +142,12 @@ export default function UploadTab({ onSuccess, onRunningChange }: UploadTabProps
       firstUpload = false;
       updateItem(item.id, { status: "uploading" });
       try {
-        const res = await api.uploadBill(item.file, parserMode, effectiveModel || undefined);
+        const res = await api.uploadBill(
+          item.file,
+          parserMode,
+          effectiveModel || undefined,
+          effectiveByokKeyId || undefined,
+        );
         const parsed = res.data.parsed;
         const lowQuality = Boolean(parsed?._low_quality);
         if (lowQuality) {
@@ -145,7 +180,7 @@ export default function UploadTab({ onSuccess, onRunningChange }: UploadTabProps
     if (successCount > 0 && problemCount === 0) {
       setTimeout(onSuccess, 2000);
     }
-  }, [parserMode, selectedModel, customModel, updateItem, onSuccess]);
+  }, [parserMode, selectedModel, customModel, byokKeyId, byokModelOverride, updateItem, onSuccess]);
 
   const addFiles = useCallback((files: File[]) => {
     if (files.length === 0) return;
@@ -231,10 +266,20 @@ export default function UploadTab({ onSuccess, onRunningChange }: UploadTabProps
         <div style={{ fontSize: 11, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 10, fontWeight: 600 }}>
           Extraction method
         </div>
-        <div style={{ display: "flex", gap: 8, marginBottom: parserMode === "freellmapi" ? 12 : 0 }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: byokKeys.length > 0 ? "repeat(3, 1fr)" : "1fr 1fr",
+            gap: 8,
+            marginBottom: parserMode === "freellmapi" || parserMode === "byok" ? 12 : 0,
+          }}
+        >
           {([
-            { id: "freellmapi", label: "🤖 AI (FreeLLMAPI)", desc: "Local OCR + routed free LLM extraction" },
-            { id: "tesseract", label: "🔍 Local OCR", desc: "Offline, no API key — best for standard layouts" },
+            { id: "freellmapi", label: "🤖 FreeLLMAPI", desc: "Routed free LLM extraction" },
+            ...(byokKeys.length > 0
+              ? [{ id: "byok" as ParserMode, label: "🔑 My API key", desc: "Use one of your saved provider keys" }]
+              : []),
+            { id: "tesseract" as ParserMode, label: "🔍 Local OCR", desc: "Offline, no API key — Estonian utility bills" },
           ] as { id: ParserMode; label: string; desc: string }[]).map(({ id, label, desc }) => (
             <button
               key={id}
@@ -242,7 +287,6 @@ export default function UploadTab({ onSuccess, onRunningChange }: UploadTabProps
               disabled={running}
               className="btn-press"
               style={{
-                flex: 1,
                 background: parserMode === id ? "var(--accent-soft)" : "var(--surface-2)",
                 border: `1.5px solid ${parserMode === id ? "var(--accent)" : "var(--border)"}`,
                 borderRadius: 10,
@@ -296,6 +340,50 @@ export default function UploadTab({ onSuccess, onRunningChange }: UploadTabProps
               <a href="http://localhost:3001" target="_blank" rel="noreferrer" style={{ color: "var(--accent)" }}>
                 localhost:3001
               </a>
+            </div>
+          </div>
+        )}
+
+        {parserMode === "byok" && (
+          <div className="fade-in" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <label style={{ fontSize: 12, color: "var(--text-2)" }}>
+              Saved key
+              <select
+                value={byokKeyId}
+                onChange={(e) => setByokKeyId(e.target.value)}
+                disabled={running || byokKeys.length === 0}
+                style={{
+                  ...inputStyle,
+                  marginTop: 4,
+                  cursor: running ? "not-allowed" : "pointer",
+                }}
+              >
+                {byokKeys.map(k => (
+                  <option key={k.id} value={k.id}>
+                    {k.label} · {k.provider}
+                    {k.default_model ? ` · ${k.default_model}` : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label style={{ fontSize: 12, color: "var(--text-2)" }}>
+              Model override <span style={{ color: "var(--text-3)" }}>(leave blank to use the key's default)</span>
+              <input
+                type="text"
+                value={byokModelOverride}
+                onChange={(e) => setByokModelOverride(e.target.value)}
+                placeholder={byokKeys.find(k => k.id === byokKeyId)?.default_model ?? ""}
+                disabled={running}
+                style={{
+                  ...inputStyle,
+                  marginTop: 4,
+                  fontFamily: "ui-monospace, SFMono-Regular, monospace",
+                }}
+              />
+            </label>
+            <div style={{ fontSize: 11, color: "var(--text-3)" }}>
+              Add or remove keys in the <strong style={{ color: "var(--text-1)" }}>Settings</strong> tab.
+              Bills uploaded with your key are billed to your provider account.
             </div>
           </div>
         )}

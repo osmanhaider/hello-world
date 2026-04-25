@@ -1,0 +1,45 @@
+"""
+Bring-your-own-key (BYOK) invoice parser.
+
+Resolves the user's saved API key, decrypts it, and sends the locally-extracted
+bill text directly to whichever OpenAI-compatible provider they configured.
+"""
+from __future__ import annotations
+
+from byok import PROVIDERS, ByokError
+from parser import extract_bill_text
+from parser_openai_compat import call_openai_compat_chat
+
+
+def parse_bill_with_byok(
+    file_path: str,
+    *,
+    provider_id: str,
+    api_key: str,
+    model: str | None = None,
+) -> dict:
+    provider = PROVIDERS.get(provider_id)
+    if provider is None:
+        raise ByokError(f"Unknown BYOK provider: {provider_id!r}")
+
+    chosen_model = model or provider.default_model
+
+    extracted = extract_bill_text(file_path)
+    invoice_text = extracted.text.strip()
+    if len(invoice_text) < 20:
+        raise RuntimeError(
+            "Local text extraction produced too little text to send to your provider."
+        )
+
+    parsed, _headers = call_openai_compat_chat(
+        invoice_text,
+        base_url=provider.base_url,
+        api_key=api_key,
+        model=chosen_model,
+        source_name=provider.name,
+    )
+    parsed["_source"] = f"byok:{provider.id}"
+    parsed["_text_source"] = extracted.source
+    parsed["_model_used"] = chosen_model
+    parsed["_routed_via"] = f"{provider.id}/{chosen_model}"
+    return parsed

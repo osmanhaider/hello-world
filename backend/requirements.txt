@@ -6,6 +6,7 @@ openai>=1.30
 httpx>=0.28
 google-auth>=2.30
 requests>=2.32
+cryptography>=42
 aiosqlite==0.22.1
 pillow==12.2.0
 pdf2image==1.17.0

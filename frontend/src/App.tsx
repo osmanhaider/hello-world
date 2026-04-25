@@ -4,18 +4,20 @@ import BillsTab from "./components/BillsTab";
 import AnalyticsTab from "./components/AnalyticsTab";
 import HelpTab from "./components/HelpTab";
 import CommunityTab from "./components/CommunityTab";
+import SettingsTab from "./components/SettingsTab";
 import LoginScreen from "./components/LoginScreen";
 import ErrorBoundary from "./components/ErrorBoundary";
 import ThemeToggle from "./components/ThemeToggle";
 import {
   BarChart2, Receipt, Upload, HelpCircle, LogOut, Users as UsersIcon,
+  Settings as SettingsIcon,
 } from "lucide-react";
 import { api, type User } from "./api";
 import { clearToken, getToken } from "./auth";
 import { useIsMobile } from "./hooks/useIsMobile";
 import { useTheme } from "./theme";
 
-type Tab = "upload" | "bills" | "analytics" | "community" | "help";
+type Tab = "upload" | "bills" | "analytics" | "community" | "settings" | "help";
 type AuthState = "loading" | "required" | "authed";
 
 export default function App() {
@@ -156,6 +158,7 @@ export default function App() {
             ["bills", "Bills", Receipt],
             ["analytics", "Analytics", BarChart2],
             ["community", "Community", UsersIcon],
+            ["settings", "Settings", SettingsIcon],
             ["help", "Help", HelpCircle],
           ] as [Tab, string, React.ElementType][]).map(([id, label, Icon]) => {
             const active = tab === id;
@@ -312,6 +315,7 @@ export default function App() {
               {tab === "bills" && <BillsTab onDataChange={refresh} />}
               {tab === "analytics" && <AnalyticsTab reloadKey={refreshKey} />}
               {tab === "community" && <CommunityTab reloadKey={refreshKey} />}
+              {tab === "settings" && <SettingsTab />}
               {tab === "help" && <HelpTab />}
             </div>
           )}

@@ -27,4 +27,5 @@ testpaths = [
     "test_auth.py",
     "test_google_auth.py",
     "test_cross_user_isolation.py",
+    "test_byok.py",
 ]

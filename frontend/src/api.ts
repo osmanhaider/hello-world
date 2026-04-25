@@ -66,6 +66,23 @@ export interface CommunityUser {
   bill_count: number;
 }
 
+export interface ByokProvider {
+  id: string;
+  name: string;
+  default_model: string;
+  key_hint: string;
+  key_url: string;
+}
+
+export interface ByokKey {
+  id: string;
+  label: string;
+  provider: string;
+  masked_key: string;
+  default_model: string | null;
+  created_at: string;
+}
+
 export interface AnalyticsSummary {
   totals: BillTotals;
   by_type: TypeStat[];
@@ -145,11 +162,12 @@ export interface MonthlyTotal {
 }
 
 export const api = {
-  uploadBill: (file: File, parser?: string, model?: string) => {
+  uploadBill: (file: File, parser?: string, model?: string, byokKeyId?: string) => {
     const fd = new FormData();
     fd.append("file", file);
     if (parser) fd.append("parser", parser);
     if (model) fd.append("model", model);
+    if (byokKeyId) fd.append("byok_key_id", byokKeyId);
     return axios.post<{ id: string; parsed: Record<string, unknown>; replaced: boolean }>(`${BASE}/api/bills/upload`, fd);
   },
   listBills: () => axios.get<Bill[]>(`${BASE}/api/bills`),
@@ -174,4 +192,10 @@ export const api = {
     axios.get<AnalyticsSummary>(`${BASE}/api/community/analytics`, {
       params: targetUserId ? { target_user_id: targetUserId } : undefined,
     }),
+  listByokProviders: () =>
+    axios.get<{ configured: boolean; providers: ByokProvider[] }>(`${BASE}/api/byok-providers`),
+  listMyByokKeys: () => axios.get<ByokKey[]>(`${BASE}/api/byok-keys`),
+  addByokKey: (input: { label: string; provider: string; key: string; default_model?: string }) =>
+    axios.post<ByokKey>(`${BASE}/api/byok-keys`, input),
+  deleteByokKey: (id: string) => axios.delete(`${BASE}/api/byok-keys/${id}`),
 };
