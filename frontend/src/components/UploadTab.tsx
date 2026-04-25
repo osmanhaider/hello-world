@@ -1,6 +1,9 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { api } from "../api";
-import { Upload, CheckCircle, AlertCircle, Loader2, RefreshCw, FileText, X } from "lucide-react";
+import {
+  Upload, CheckCircle, AlertCircle, Loader2, RefreshCw, FileText, X,
+  ChevronDown, ChevronUp,
+} from "lucide-react";
 
 const UTILITY_ICONS: Record<string, string> = {
   electricity: "⚡",
@@ -50,6 +53,7 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
   const [selectedModel, setSelectedModel] = useState(FALLBACK_MODELS[0].id);
   const [customModel, setCustomModel] = useState("");
   const [modelsLoading, setModelsLoading] = useState(true);
+  const [expandedRow, setExpandedRow] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -358,7 +362,16 @@ export default function UploadTab({ onSuccess }: UploadTabProps) {
           </div>
           <div className="list-stagger" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             {queue.map((item, i) => (
-              <QueueRow key={item.id} item={item} index={i} onRemove={removeItem} disabled={running} />
+              <QueueRow
+                key={item.id}
+                item={item}
+                index={i}
+                onRemove={removeItem}
+                disabled={running}
+                expanded={expandedRow === item.id}
+                onToggle={(id) => setExpandedRow(prev => (prev === id ? null : id))}
+                parserMode={parserMode}
+              />
             ))}
           </div>
           {allDone && successCount > 0 && (
@@ -560,10 +573,13 @@ interface QueueRowProps {
   index: number;
   onRemove: (id: string) => void;
   disabled: boolean;
+  expanded: boolean;
+  onToggle: (id: string) => void;
+  parserMode: ParserMode;
 }
 
-function QueueRow({ item, index, onRemove, disabled }: QueueRowProps) {
-  const { status, file, errorMsg } = item;
+function QueueRow({ item, index, onRemove, disabled, expanded, onToggle, parserMode }: QueueRowProps) {
+  const { status, file, errorMsg, parsed } = item;
   const StatusIcon = (() => {
     switch (status) {
       case "uploading": return <Loader2 size={16} style={{ color: "var(--accent)", animation: "spin 1s linear infinite" }} />;
@@ -598,44 +614,138 @@ function QueueRow({ item, index, onRemove, disabled }: QueueRowProps) {
     }
   })();
   const canRemove = !disabled && status !== "uploading";
+  const isExpandable =
+    status === "error" || status === "low_quality" || status === "too_large";
+  const errorText = (() => {
+    if (status === "low_quality") {
+      const e = parsed?.error;
+      return typeof e === "string" ? e : "The parser couldn't extract enough fields from this invoice.";
+    }
+    if (status === "too_large") return errorMsg || `File too large — max ${MAX_FILE_MB} MB`;
+    return errorMsg || "Upload failed";
+  })();
+  const isRateLimit = /rate limit|exhausted|429/i.test(errorText);
+  const hint = (() => {
+    if (status === "too_large") {
+      return `Trim or compress the PDF below ${MAX_FILE_MB} MB and re-drop it. Most invoices fit easily — usually a scan resolution issue.`;
+    }
+    if (isRateLimit) {
+      return "Your provider hit its per-minute rate limit. Wait ~60 seconds and re-upload, or add another provider key to FreeLLMAPI so the router can fall over.";
+    }
+    if (status === "low_quality" && parserMode !== "freellmapi") {
+      return "The local OCR parser found very little data. Switch to AI (FreeLLMAPI) above and re-upload so a free LLM can structure the extracted text.";
+    }
+    if (status === "low_quality" && parserMode === "freellmapi") {
+      return "The model returned a response but with too few useful fields. Try a different model from the dropdown, or re-upload with a clearer scan.";
+    }
+    return "Try uploading the file again. If this keeps happening, check the browser console for the underlying network error.";
+  })();
   return (
-    <div style={{
-      display: "flex",
-      alignItems: "center",
-      gap: 10,
-      padding: "8px 10px",
-      background: "var(--surface-2)",
-      borderRadius: 8,
-      border: status === "error" || status === "too_large" ? "1px solid var(--danger)" : "1px solid transparent",
-      ["--i" as string]: Math.min(index, 12),
-    } as React.CSSProperties}>
-      <div style={{ flexShrink: 0 }}>{StatusIcon}</div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ color: "var(--text-1)", fontSize: 13, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          {file.name}
+    <div
+      style={{
+        background: "var(--surface-2)",
+        borderRadius: 8,
+        border: status === "error" || status === "too_large" ? "1px solid var(--danger)" : "1px solid transparent",
+        ["--i" as string]: Math.min(index, 12),
+        overflow: "hidden",
+      } as React.CSSProperties}
+    >
+      <div
+        onClick={isExpandable ? () => onToggle(item.id) : undefined}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          padding: "8px 10px",
+          cursor: isExpandable ? "pointer" : "default",
+        }}
+      >
+        <div style={{ flexShrink: 0 }}>{StatusIcon}</div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ color: "var(--text-1)", fontSize: 13, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {file.name}
+          </div>
+          <div style={{ color: statusColor, fontSize: 11, marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {formatBytes(file.size)} · {statusLabel}
+          </div>
         </div>
-        <div style={{ color: statusColor, fontSize: 11, marginTop: 1 }}>
-          {formatBytes(file.size)} · {statusLabel}
-        </div>
+        {isExpandable && (
+          expanded
+            ? <ChevronUp size={14} style={{ color: "var(--text-3)", flexShrink: 0 }} />
+            : <ChevronDown size={14} style={{ color: "var(--text-3)", flexShrink: 0 }} />
+        )}
+        {canRemove && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onRemove(item.id); }}
+            title="Remove"
+            style={{
+              background: "transparent",
+              border: "none",
+              color: "var(--text-3)",
+              cursor: "pointer",
+              padding: 4,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              flexShrink: 0,
+            }}
+          >
+            <X size={14} />
+          </button>
+        )}
       </div>
-      {canRemove && (
-        <button
-          onClick={() => onRemove(item.id)}
-          title="Remove"
+
+      {isExpandable && expanded && (
+        <div
+          className="fade-in"
           style={{
-            background: "transparent",
-            border: "none",
-            color: "var(--text-3)",
-            cursor: "pointer",
-            padding: 4,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            flexShrink: 0,
+            borderTop: "1px solid var(--divider)",
+            padding: "10px 12px",
+            background: "var(--surface-1)",
           }}
         >
-          <X size={14} />
-        </button>
+          <div
+            style={{
+              fontSize: 11,
+              color: "var(--text-3)",
+              textTransform: "uppercase",
+              letterSpacing: "0.06em",
+              fontWeight: 600,
+              marginBottom: 4,
+            }}
+          >
+            Error
+          </div>
+          <pre
+            style={{
+              margin: 0,
+              padding: "8px 10px",
+              background: "var(--surface-2)",
+              border: "1px solid var(--border)",
+              borderRadius: 6,
+              fontSize: 12,
+              lineHeight: 1.5,
+              color: "var(--text-1)",
+              whiteSpace: "pre-wrap",
+              wordBreak: "break-word",
+              maxHeight: 200,
+              overflow: "auto",
+              fontFamily: "ui-monospace, SFMono-Regular, monospace",
+            }}
+          >
+            {errorText}
+          </pre>
+          <div
+            style={{
+              fontSize: 12,
+              color: "var(--text-2)",
+              marginTop: 8,
+              lineHeight: 1.5,
+            }}
+          >
+            <strong style={{ color: "var(--text-1)" }}>Suggestion:</strong> {hint}
+          </div>
+        </div>
       )}
     </div>
   );
