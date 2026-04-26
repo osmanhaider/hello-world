@@ -63,7 +63,7 @@ Open **http://localhost:5173**. Uploads and the SQLite DB are persisted in a nam
 
 ## Deploy (free tier)
 
-A free-tier cloud setup: **Vercel** for the frontend, **Render** for the backend, **Google Sign-In** for auth.
+A free-tier cloud setup: **Vercel** for the frontend, **Render** for the backend, **Supabase Postgres** for persistent data, and **Google Sign-In** for auth.
 
 > Multi-user: every Google account that signs in gets its own private bill workspace. By default uploaded bills are public — visible in the **Community** tab to every other signed-in user. Mark a bill private with the lock toggle on the Bills tab to keep it to yourself. Set `ALLOWED_EMAILS` on the backend to restrict sign-in to a list of accounts you trust.
 
@@ -76,7 +76,20 @@ A free-tier cloud setup: **Vercel** for the frontend, **Render** for the backend
    - `https://<your-vercel-host>.vercel.app`
 4. Save. Copy the **Client ID** (looks like `123456-abc.apps.googleusercontent.com`). The same value goes into `GOOGLE_CLIENT_ID` (backend) and `VITE_GOOGLE_CLIENT_ID` (frontend).
 
-### 1. Backend on Render
+### 1. Create a Supabase Postgres database
+
+1. Open [Supabase](https://supabase.com) → **New project**.
+2. Pick a region close to your Render backend.
+3. Wait for provisioning to finish.
+4. Project Settings → **Database** → **Connection string**.
+5. Copy the **Transaction pooler** connection string if available (best for hosted web apps), otherwise the direct connection string. It looks like:
+   ```
+   postgresql://postgres.<project-ref>:<password>@aws-...pooler.supabase.com:6543/postgres
+   ```
+
+The backend creates/migrates its tables on startup (`users`, `bills`, `user_api_keys`) when `DATABASE_URL` is set.
+
+### 2. Backend on Render
 
 1. Log in to [Render](https://render.com) → **New** → **Web Service** → pick this repo.
 2. Settings:
@@ -88,6 +101,7 @@ A free-tier cloud setup: **Vercel** for the frontend, **Render** for the backend
    - `FREELLMAPI_BASE_URL` = your FreeLLMAPI server URL
    - `FREELLMAPI_API_KEY` = your FreeLLMAPI unified key *(if auth is enforced)*
    - `FREELLMAPI_MODEL` = `auto` *(optional; overridable per upload)*
+   - `DATABASE_URL` = the Supabase connection string from step 1
    - `GOOGLE_CLIENT_ID` = the Web Client ID from step 0
    - `ALLOWED_EMAILS` = optional comma-separated allowlist, e.g. `you@gmail.com,friend@gmail.com`
    - `AUTH_SECRET` = a long random hex string — generate locally with:
@@ -96,9 +110,9 @@ A free-tier cloud setup: **Vercel** for the frontend, **Render** for the backend
      ```
 4. Click **Create Web Service**. First build takes ~5 min. Copy the generated URL (e.g. `https://ee-utility-trackly.onrender.com`).
 
-The free tier spins down after 15 minutes of inactivity. The first request after a cold start takes ~30 s. The SQLite DB lives on the ephemeral disk and resets on every redeploy — for persistence, migrate to Supabase Postgres.
+The free tier spins down after 15 minutes of inactivity. The first request after a cold start takes ~30 s. Data survives restarts/redeploys because rows live in Supabase Postgres when `DATABASE_URL` is set. Uploaded original files in `UPLOADS_DIR` are still ephemeral; the app mainly relies on parsed DB data.
 
-### 2. Frontend on Vercel
+### 3. Frontend on Vercel
 
 1. Log in to [Vercel](https://vercel.com) → **Add New** → **Project** → import this repo.
 2. Settings:
@@ -111,14 +125,14 @@ The free tier spins down after 15 minutes of inactivity. The first request after
 
 The bundled `frontend/vercel.json` provides SPA routing so deep links / refreshes don't 404.
 
-### 3. CORS
+### 4. CORS
 
 The backend accepts requests from `*.vercel.app` by default. For a custom domain, set `CORS_ALLOW_ORIGINS` on the Render service:
 ```
 CORS_ALLOW_ORIGINS=https://bills.example.com,https://www.bills.example.com
 ```
 
-### 4. Sign in
+### 5. Sign in
 
 Visiting the Vercel URL shows a Google Sign-In button. The first sign-in creates a row in the `users` table keyed on the Google `sub` claim. The app token is stored in `localStorage` and lasts 7 days (override with `TOKEN_TTL_SEC`). Rotate `AUTH_SECRET` to invalidate every existing session immediately.
 
@@ -201,6 +215,7 @@ Backend env vars (see `backend/.env.example` for the full list):
 - `AUTH_SECRET` — required. 64-char hex, generate with `python -c "import secrets; print(secrets.token_hex(32))"`. Used to sign app session tokens.
 - `GOOGLE_CLIENT_ID` — required. OAuth Web Client ID from Google Cloud Console (same value as the frontend's `VITE_GOOGLE_CLIENT_ID`).
 - `ALLOWED_EMAILS` — optional comma-separated allowlist (e.g. `you@gmail.com,friend@gmail.com`). When set, only those Google accounts can sign in.
+- `DATABASE_URL` — optional locally, required in production for persistent Supabase/Postgres storage. If unset, the backend uses local SQLite at `DB_PATH`.
 - `MAX_UPLOAD_BYTES` — hard cap on upload size in bytes per file (default 25 MB). Multi-file uploads are supported; each file is bounded by this limit.
 - `DB_PATH`, `UPLOADS_DIR`, `LOG_LEVEL` — override storage paths and log verbosity.
 

@@ -7,7 +7,6 @@ import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
-import aiosqlite
 import httpx
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -16,6 +15,7 @@ from pydantic import BaseModel
 
 import auth as auth_mod
 import byok as byok_mod
+import db as db_mod
 import google_auth as google_auth_mod
 from parser import parse_bill as parse_bill_tesseract
 from parser_byok import parse_bill_with_byok
@@ -43,8 +43,9 @@ os.makedirs(UPLOADS_DIR, exist_ok=True)
 DB_BUSY_TIMEOUT_SEC = 10.0
 
 def _db():
-    """Open a SQLite connection with our shared busy-timeout."""
-    return aiosqlite.connect(DB_PATH, timeout=DB_BUSY_TIMEOUT_SEC)
+    """Open the configured database: Supabase/Postgres when DATABASE_URL is set,
+    otherwise local SQLite for dev/tests."""
+    return db_mod.connect(DB_PATH, sqlite_timeout=DB_BUSY_TIMEOUT_SEC)
 
 # Hard cap on upload size — protects against memory exhaustion from huge files.
 MAX_UPLOAD_BYTES = int(os.environ.get("MAX_UPLOAD_BYTES", 25 * 1024 * 1024))  # 25 MB
@@ -67,76 +68,124 @@ _EDITABLE_BILL_COLUMNS = frozenset({
 
 async def init_db() -> None:
     async with _db() as db:
-        # WAL mode lets readers and a single writer proceed concurrently
-        # instead of blocking each other — important when several browsers
-        # are uploading bills at the same time. Setting persists in the
-        # database header so this runs once per database.
-        await db.execute("PRAGMA journal_mode=WAL")
-        await db.execute("""
-            CREATE TABLE IF NOT EXISTS bills (
-                id TEXT PRIMARY KEY,
-                filename TEXT NOT NULL,
-                upload_date TEXT NOT NULL,
-                bill_date TEXT,
-                provider TEXT,
-                utility_type TEXT,
-                amount_eur REAL,
-                consumption_kwh REAL,
-                consumption_m3 REAL,
-                period_start TEXT,
-                period_end TEXT,
-                account_number TEXT,
-                address TEXT,
-                raw_json TEXT,
-                notes TEXT,
-                user_id TEXT,
-                is_private INTEGER NOT NULL DEFAULT 0
-            )
-        """)
-        # Per-user identity table. id == Google `sub` claim.
-        await db.execute("""
-            CREATE TABLE IF NOT EXISTS users (
-                id TEXT PRIMARY KEY,
-                email TEXT UNIQUE NOT NULL,
-                name TEXT,
-                picture_url TEXT,
-                created_at TEXT NOT NULL
-            )
-        """)
-        # Per-user BYOK API keys for OpenAI-compatible providers. The plaintext
-        # key never lives in the DB — encrypted_key/iv/tag come from AES-GCM
-        # in `byok.py` using the BYOK_ENCRYPTION_KEY env var.
-        await db.execute("""
-            CREATE TABLE IF NOT EXISTS user_api_keys (
-                id TEXT PRIMARY KEY,
-                user_id TEXT NOT NULL,
-                label TEXT NOT NULL,
-                provider TEXT NOT NULL,
-                encrypted_key TEXT NOT NULL,
-                iv TEXT NOT NULL,
-                tag TEXT NOT NULL,
-                default_model TEXT,
-                created_at TEXT NOT NULL,
-                UNIQUE(user_id, label)
-            )
-        """)
-        await db.execute(
-            "CREATE INDEX IF NOT EXISTS user_api_keys_user_id_idx ON user_api_keys(user_id)"
-        )
-        # Migrations for existing databases. We only ever add columns —
-        # never drop or rename — so legacy rows remain queryable.
-        async with db.execute("PRAGMA table_info(bills)") as c:
-            cols = {row[1] for row in await c.fetchall()}
-        if "user_id" not in cols:
-            await db.execute("ALTER TABLE bills ADD COLUMN user_id TEXT")
-        if "is_private" not in cols:
-            await db.execute(
-                "ALTER TABLE bills ADD COLUMN is_private INTEGER NOT NULL DEFAULT 0"
-            )
-        await db.execute(
-            "CREATE INDEX IF NOT EXISTS bills_user_id_idx ON bills(user_id)"
-        )
+        if db_mod.is_postgres():
+            logger.info("Database backend: postgres")
+            await _init_postgres(db)
+        else:
+            logger.info("Database backend: sqlite")
+            await _init_sqlite(db)
         await db.commit()
+
+
+async def _init_sqlite(db) -> None:
+    # WAL mode lets readers and a single writer proceed concurrently instead of
+    # blocking each other. This is SQLite-only and skipped for Supabase.
+    await db.execute("PRAGMA journal_mode=WAL")
+    await db.execute("""
+        CREATE TABLE IF NOT EXISTS bills (
+            id TEXT PRIMARY KEY,
+            filename TEXT NOT NULL,
+            upload_date TEXT NOT NULL,
+            bill_date TEXT,
+            provider TEXT,
+            utility_type TEXT,
+            amount_eur REAL,
+            consumption_kwh REAL,
+            consumption_m3 REAL,
+            period_start TEXT,
+            period_end TEXT,
+            account_number TEXT,
+            address TEXT,
+            raw_json TEXT,
+            notes TEXT,
+            user_id TEXT,
+            is_private INTEGER NOT NULL DEFAULT 0
+        )
+    """)
+    await db.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id TEXT PRIMARY KEY,
+            email TEXT UNIQUE NOT NULL,
+            name TEXT,
+            picture_url TEXT,
+            created_at TEXT NOT NULL
+        )
+    """)
+    await db.execute("""
+        CREATE TABLE IF NOT EXISTS user_api_keys (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            label TEXT NOT NULL,
+            provider TEXT NOT NULL,
+            encrypted_key TEXT NOT NULL,
+            iv TEXT NOT NULL,
+            tag TEXT NOT NULL,
+            default_model TEXT,
+            created_at TEXT NOT NULL,
+            UNIQUE(user_id, label)
+        )
+    """)
+    await db.execute(
+        "CREATE INDEX IF NOT EXISTS user_api_keys_user_id_idx ON user_api_keys(user_id)"
+    )
+    async with db.execute("PRAGMA table_info(bills)") as c:
+        cols = {row[1] for row in await c.fetchall()}
+    if "user_id" not in cols:
+        await db.execute("ALTER TABLE bills ADD COLUMN user_id TEXT")
+    if "is_private" not in cols:
+        await db.execute("ALTER TABLE bills ADD COLUMN is_private INTEGER NOT NULL DEFAULT 0")
+    await db.execute("CREATE INDEX IF NOT EXISTS bills_user_id_idx ON bills(user_id)")
+
+
+async def _init_postgres(db) -> None:
+    await db.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id TEXT PRIMARY KEY,
+            email TEXT UNIQUE NOT NULL,
+            name TEXT,
+            picture_url TEXT,
+            created_at TEXT NOT NULL
+        )
+    """)
+    await db.execute("""
+        CREATE TABLE IF NOT EXISTS bills (
+            id TEXT PRIMARY KEY,
+            filename TEXT NOT NULL,
+            upload_date TEXT NOT NULL,
+            bill_date TEXT,
+            provider TEXT,
+            utility_type TEXT,
+            amount_eur DOUBLE PRECISION,
+            consumption_kwh DOUBLE PRECISION,
+            consumption_m3 DOUBLE PRECISION,
+            period_start TEXT,
+            period_end TEXT,
+            account_number TEXT,
+            address TEXT,
+            raw_json TEXT,
+            notes TEXT,
+            user_id TEXT,
+            is_private BOOLEAN NOT NULL DEFAULT false
+        )
+    """)
+    await db.execute("""
+        CREATE TABLE IF NOT EXISTS user_api_keys (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            label TEXT NOT NULL,
+            provider TEXT NOT NULL,
+            encrypted_key TEXT NOT NULL,
+            iv TEXT NOT NULL,
+            tag TEXT NOT NULL,
+            default_model TEXT,
+            created_at TEXT NOT NULL,
+            UNIQUE(user_id, label)
+        )
+    """)
+    await db.execute("ALTER TABLE bills ADD COLUMN IF NOT EXISTS user_id TEXT")
+    await db.execute("ALTER TABLE bills ADD COLUMN IF NOT EXISTS is_private BOOLEAN NOT NULL DEFAULT false")
+    await db.execute("CREATE INDEX IF NOT EXISTS bills_user_id_idx ON bills(user_id)")
+    await db.execute("CREATE INDEX IF NOT EXISTS user_api_keys_user_id_idx ON user_api_keys(user_id)")
 
 
 async def _upsert_user(db, identity: google_auth_mod.GoogleIdentity) -> None:
@@ -628,7 +677,6 @@ async def upload_bill(
 @app.get("/api/bills")
 async def list_bills(user_id: str = Depends(get_user_id)):
     async with _db() as db:
-        db.row_factory = aiosqlite.Row
         async with db.execute(
             "SELECT * FROM bills WHERE user_id = ? "
             "ORDER BY bill_date DESC, upload_date DESC",
@@ -641,7 +689,6 @@ async def list_bills(user_id: str = Depends(get_user_id)):
 @app.get("/api/bills/{bill_id}")
 async def get_bill(bill_id: str, user_id: str = Depends(get_user_id)):
     async with _db() as db:
-        db.row_factory = aiosqlite.Row
         async with db.execute(
             "SELECT * FROM bills WHERE id = ? AND user_id = ?",
             (bill_id, user_id),
@@ -777,7 +824,7 @@ def _build_bill_filter(
         clauses.append("user_id = ?")
         params.append(user_id_filter)
     if public_only:
-        clauses.append("COALESCE(is_private, 0) = 0")
+        clauses.append(db_mod.public_condition())
     where_sql = " AND ".join(clauses) if clauses else "1=1"
     return where_sql, params
 
@@ -798,7 +845,6 @@ async def _compute_analytics(user_id_filter: str | None, public_only: bool) -> d
     )
 
     async with _db() as db:
-        db.row_factory = aiosqlite.Row
 
         # Fetch every bill so we can split korteriühistu bills into their
         # individual line-item categories (electricity, water, heating,
@@ -825,16 +871,21 @@ async def _compute_analytics(user_id_filter: str | None, public_only: bool) -> d
         """, params_provider) as c:
             by_provider = [dict(r) for r in await c.fetchall()]
 
-        async with db.execute(f"""
-            SELECT
-                strftime('%Y-%m', COALESCE(period_start, bill_date, upload_date)) as month,
-                SUM(amount_eur) as total_eur
-            FROM bills
-            WHERE {where_amt}
-            GROUP BY month
-            ORDER BY month
-        """, params_amt) as c:
-            monthly_total = [dict(r) for r in await c.fetchall()]
+        # DB-neutral replacement for SQLite's strftime('%Y-%m', ...). Fetching
+        # all candidate bills is already required above for line-item analytics,
+        # so computing monthly totals in Python avoids dialect-specific SQL.
+        monthly_totals_by_month: dict[str, float] = {}
+        for bill in all_bills:
+            date_key = bill["period_start"] or bill["bill_date"] or bill["upload_date"]
+            amount = bill["amount_eur"]
+            if not date_key or len(date_key) < 7 or amount is None:
+                continue
+            month = str(date_key)[:7]
+            monthly_totals_by_month[month] = monthly_totals_by_month.get(month, 0.0) + float(amount)
+        monthly_total = [
+            {"month": month, "total_eur": round(total, 2)}
+            for month, total in sorted(monthly_totals_by_month.items())
+        ]
 
     # ────────────────────────────────────────────────────────────────────
     # Per-category breakdown.
@@ -1010,7 +1061,6 @@ async def _compute_analytics(user_id_filter: str | None, public_only: bool) -> d
 
     line_item_trends: list[dict] = []
     async with _db() as db:
-        db.row_factory = aiosqlite.Row
         async with db.execute(
             f"SELECT period_start, bill_date, upload_date, raw_json FROM bills "
             f"WHERE {where_raw}",
@@ -1075,19 +1125,18 @@ async def analytics_summary(user_id: str = Depends(get_user_id)):
 async def community_users(_user_id: str = Depends(get_user_id)):
     """List every signed-up user with a count of their public bills."""
     async with _db() as db:
-        db.row_factory = aiosqlite.Row
         async with db.execute(
-            """
+            f"""
             SELECT u.id, u.name, u.email, u.picture_url,
                    COALESCE(b.bill_count, 0) AS bill_count
             FROM users u
             LEFT JOIN (
                 SELECT user_id, COUNT(*) AS bill_count
                 FROM bills
-                WHERE COALESCE(is_private, 0) = 0
+                WHERE {db_mod.public_condition()}
                 GROUP BY user_id
             ) b ON b.user_id = u.id
-            ORDER BY bill_count DESC, u.name COLLATE NOCASE
+            ORDER BY bill_count DESC, LOWER(COALESCE(u.name, ''))
             """
         ) as c:
             rows = await c.fetchall()
@@ -1101,22 +1150,22 @@ async def community_bills(
 ):
     """List public bills across the whole community, optionally scoped to one user."""
     async with _db() as db:
-        db.row_factory = aiosqlite.Row
+        public_bills = db_mod.public_condition("b")
         if target_user_id:
-            sql = """
+            sql = f"""
                 SELECT b.*, u.name AS owner_name, u.picture_url AS owner_picture
                 FROM bills b
                 LEFT JOIN users u ON u.id = b.user_id
-                WHERE b.user_id = ? AND COALESCE(b.is_private, 0) = 0
+                WHERE b.user_id = ? AND {public_bills}
                 ORDER BY COALESCE(b.bill_date, b.upload_date) DESC
             """
             params: tuple = (target_user_id,)
         else:
-            sql = """
+            sql = f"""
                 SELECT b.*, u.name AS owner_name, u.picture_url AS owner_picture
                 FROM bills b
                 LEFT JOIN users u ON u.id = b.user_id
-                WHERE COALESCE(b.is_private, 0) = 0
+                WHERE {public_bills}
                 ORDER BY COALESCE(b.bill_date, b.upload_date) DESC
             """
             params = ()
@@ -1153,7 +1202,6 @@ async def _resolve_byok_key(user_id: str, key_id: str) -> dict:
     """Fetch a user's saved key row, scoped by user_id. Raises 404 otherwise."""
     _require_byok_configured()
     async with _db() as db:
-        db.row_factory = aiosqlite.Row
         async with db.execute(
             "SELECT id, user_id, label, provider, encrypted_key, iv, tag, default_model "
             "FROM user_api_keys WHERE id = ? AND user_id = ?",
@@ -1195,7 +1243,6 @@ async def byok_keys_list(user_id: str = Depends(get_user_id)):
     """Return the caller's saved keys with masked values — never plaintext."""
     _require_byok_configured()
     async with _db() as db:
-        db.row_factory = aiosqlite.Row
         async with db.execute(
             "SELECT id, label, provider, encrypted_key, iv, tag, default_model, created_at "
             "FROM user_api_keys WHERE user_id = ? ORDER BY created_at DESC",
@@ -1254,7 +1301,7 @@ async def byok_keys_create(
                  (body.default_model or "").strip() or None, now),
             )
             await db.commit()
-    except aiosqlite.IntegrityError as e:
+    except db_mod.IntegrityError as e:
         raise HTTPException(409, f"You already have a key with label {label!r}.") from e
 
     return {
